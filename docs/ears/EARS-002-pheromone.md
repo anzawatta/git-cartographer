@@ -1,4 +1,4 @@
-# EARS-002: Pheromone Layer
+# EARS-002: Traverse log Layer
 
 **Status:** Draft
 **Date:** 2026-04-12

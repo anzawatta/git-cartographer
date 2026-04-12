@@ -1,0 +1,23 @@
+[project]
+name = "git-cartographer"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "tree-sitter>=0.21",
+    "tree-sitter-python>=0.21",
+    "tree-sitter-javascript>=0.21",
+    "tree-sitter-typescript>=0.21",
+    "tree-sitter-go>=0.21",
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+cartographer = "src.cartographer:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
