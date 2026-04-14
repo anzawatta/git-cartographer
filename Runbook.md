@@ -41,8 +41,18 @@ python -m src.cartographer /path/to/your/repo
 
 ```bash
 python -m src.cartographer /path/to/repo \
-  --output-dir output \   # 出力先ディレクトリ（リポジトリ相対）
-  --window 100            # フルスキャン時に参照するコミット数
+  --output-dir output \          # 出力先ディレクトリ（リポジトリ相対）
+  --output-dir /absolute/path \  # 絶対パス指定も可（リポジトリ外に出力）
+  --window 100                   # フルスキャン時に参照するコミット数
+```
+
+### 複数 ward をまとめて解析する例
+
+```bash
+for ward in wards/*/; do
+  python -m src.cartographer "$ward" \
+    --output-dir "$(realpath $ward)/output"
+done
 ```
 
 ### 出力ファイル

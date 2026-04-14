@@ -96,7 +96,10 @@ def run(
     7. state.set_last_hash() 更新
     """
     repo_path = os.path.abspath(repo_path)
-    output_dir = _resolve_output_dir(os.path.join(repo_path, output_dir))
+    if os.path.isabs(output_dir):
+        output_dir = _resolve_output_dir(output_dir)
+    else:
+        output_dir = _resolve_output_dir(os.path.join(repo_path, output_dir))
 
     print(f"[cartographer] repo: {repo_path}")
 
