@@ -1,3 +1,10 @@
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+.venv/
+
+# 生成物（ローカルで uv run python -m src.cartographer . で再生成）
+output/*
+!output/.gitkeep
+.cartographer_state

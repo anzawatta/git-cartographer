@@ -83,6 +83,7 @@ def run(
     repo_path: str,
     output_dir: str,
     window: int = 100,
+    include_stdlib: bool = False,
 ) -> None:
     """
     地図生成のメインロジック。
@@ -195,7 +196,7 @@ def run(
 
     # @see EARS-001#REQ-S003
     stable_files = layers.build_stable(churn, threshold=0)
-    structure_data = layers.build_structure(churn, cochange, import_graph)
+    structure_data = layers.build_structure(churn, cochange, import_graph, include_stdlib=include_stdlib)
     hotspots_data = layers.build_hotspots(churn, top_n=20)
 
     # Markdown 書き出し
@@ -241,9 +242,15 @@ def main() -> None:
         default=100,
         help="フルスキャン時に参照するコミット数（デフォルト: 100）",
     )
+    parser.add_argument(
+        "--include-stdlib",
+        action="store_true",
+        default=False,
+        help="Hub Files に標準ライブラリを含める（デフォルト: 除外）",
+    )
 
     args = parser.parse_args()
-    run(args.repo_path, args.output_dir, args.window)
+    run(args.repo_path, args.output_dir, args.window, include_stdlib=args.include_stdlib)
 
 
 if __name__ == "__main__":

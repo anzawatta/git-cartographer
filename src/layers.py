@@ -6,7 +6,17 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timezone
+
+# Python 3.10+ で利用可能。それ以前は空セットにフォールバック
+_PYTHON_STDLIB: frozenset[str] = getattr(sys, "stdlib_module_names", frozenset())
+
+
+def _is_stdlib(module_name: str) -> bool:
+    """トップレベルモジュール名が Python 標準ライブラリかどうかを返す。"""
+    top = module_name.split(".")[0]
+    return top in _PYTHON_STDLIB
 
 
 # @see EARS-001#REQ-U002
@@ -26,6 +36,7 @@ def build_structure(
     churn_counts: dict[str, int],
     cochange_pairs: dict[tuple[str, str], int],
     import_graph: dict[str, list[str]],
+    include_stdlib: bool = False,
 ) -> dict:
     """
     依存関係サマリを構築する。
@@ -42,10 +53,12 @@ def build_structure(
     cochange_top = [(a, b, cnt) for (a, b), cnt in sorted_pairs[:20]]
 
     # 被参照数（どのファイルから import されているか）を集計
+    # デフォルトで stdlib を除外し、プロジェクト内モジュールのみを対象とする
     in_degree: dict[str, int] = {}
     for deps in import_graph.values():
         for dep in deps:
-            in_degree[dep] = in_degree.get(dep, 0) + 1
+            if include_stdlib or not _is_stdlib(dep):
+                in_degree[dep] = in_degree.get(dep, 0) + 1
 
     hub_files = sorted(in_degree.items(), key=lambda x: x[1], reverse=True)[:20]
 
