@@ -85,6 +85,7 @@ def run(
     window: int = 100,
     include_stdlib: bool = False,
     markdown: bool = False,
+    halflife_days: int = 90,
 ) -> None:
     """
     地図生成のメインロジック。
@@ -147,7 +148,9 @@ def run(
     scan_info = {
         "mode": scan_mode,
         "head_hash": head_hash,
+        "since_hash": since_hash,
         "generated_at": generated_at,
+        "halflife_days": halflife_days,
     }
 
     # git churn 分析
@@ -278,9 +281,22 @@ def main() -> None:
         default=False,
         help="Markdown ファイル（stable.md, co-change.md, hotspot.md）を生成する（デフォルト: 生成しない）",
     )
+    parser.add_argument(
+        "--halflife-days",
+        type=int,
+        default=90,
+        help="co-change の半減期（日数、デフォルト: 90）",
+    )
 
     args = parser.parse_args()
-    run(args.repo_path, args.output_dir, args.window, include_stdlib=args.include_stdlib, markdown=args.markdown)
+    run(
+        args.repo_path,
+        args.output_dir,
+        args.window,
+        include_stdlib=args.include_stdlib,
+        markdown=args.markdown,
+        halflife_days=args.halflife_days,
+    )
 
 
 if __name__ == "__main__":

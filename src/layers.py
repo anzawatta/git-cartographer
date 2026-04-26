@@ -232,26 +232,36 @@ def render_cochange_jsonl(structure_data: dict, scan_info: dict) -> str:
     """
     NDJSON 形式の co-change データを返す（1行1エッジ）。
 
-    各行は以下のフィールドを持つ:
+    1行目はメタ行:
+      {"_type":"meta","head":"<hash>","range":{"from":"<since_hash or null>","to":"<head_hash>"},"generated_at":"<ISO8601>","halflife_days":<int>}
+
+    各データ行は以下のフィールドを持つ:
       pair: [file_a, file_b]
+      effective_weight: null (計算は別タスク)
+      last_cochange_hash: null (計算は別タスク)
       sample_size: int   (同時変更コミット数)
-      halflife_days: null  (計算不能のため null)
-      decay_factor: null   (計算不能のため null)
-      effective_weight: null (計算不能のため null)
-      generated_at: ISO8601
     """
+    head_hash = scan_info.get("head_hash", "unknown")
+    since_hash = scan_info.get("since_hash", None)
     generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
+    halflife_days = scan_info.get("halflife_days", 90)
     cochange_top: list[tuple[str, str, int]] = structure_data.get("cochange_top", [])
 
-    lines = []
+    meta = {
+        "_type": "meta",
+        "head": head_hash,
+        "range": {"from": since_hash, "to": head_hash},
+        "generated_at": generated_at,
+        "halflife_days": halflife_days,
+    }
+
+    lines = [json.dumps(meta, ensure_ascii=False)]
     for file_a, file_b, count in cochange_top:
         record = {
             "pair": [file_a, file_b],
-            "sample_size": count,
-            "halflife_days": None,
-            "decay_factor": None,
             "effective_weight": None,
-            "generated_at": generated_at,
+            "last_cochange_hash": None,
+            "sample_size": count,
         }
         lines.append(json.dumps(record, ensure_ascii=False))
 
@@ -280,6 +290,7 @@ def render_hotspot_json(hotspots_data: list[tuple[str, int]], scan_info: dict) -
       ]
     }
     """
+    head_hash = scan_info.get("head_hash", "unknown")
     generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
 
     ranking = []
@@ -294,6 +305,7 @@ def render_hotspot_json(hotspots_data: list[tuple[str, int]], scan_info: dict) -
         })
 
     payload = {
+        "head": head_hash,
         "generated_at": generated_at,
         "halflife_days": None,
         "ranking": ranking,
@@ -321,6 +333,7 @@ def render_stable_json(files: list[str], scan_info: dict) -> str:
       ]
     }
     """
+    head_hash = scan_info.get("head_hash", "unknown")
     generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
 
     load_bearing = []
@@ -334,6 +347,7 @@ def render_stable_json(files: list[str], scan_info: dict) -> str:
         })
 
     payload = {
+        "head": head_hash,
         "generated_at": generated_at,
         "load_bearing": load_bearing,
     }
