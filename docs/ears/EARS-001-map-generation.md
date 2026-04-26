@@ -3,7 +3,7 @@
 **Status:** Draft
 **Date:** 2026-04-12
 **Updated:** 2026-04-26
-**Related ADR:** ADR-001
+**Related ADR:** ADR-001 ADR-002
 
 ## 不変条件
 
@@ -21,8 +21,8 @@
 
 ## 状態駆動条件
 
-1. REQ-S001: `.cartographer_state` が存在しない場合、System はリポジトリ全体のフルスキャンを実行し、完了後に HEAD のコミットハッシュを `.cartographer_state` に記録しなければならない
-2. REQ-S002: `.cartographer_state` が存在する場合、System は記録済みハッシュから HEAD までの差分ファイルのみを再解析しなければならない
+1. REQ-S001: HEAD が `.cartographer_state` に記録されたハッシュと一致する場合、System は実行をスキップしなければならない
+2. REQ-S002: HEAD が `.cartographer_state` と異なる、またはファイルが存在しない場合、System は最新 `window` コミットをフルスキャンし、完了後に HEAD ハッシュを `.cartographer_state` に記録しなければならない
 3. REQ-S003: stable 層は、churn 頻度が低い（過去 N コミットで変更なし）ファイルのみを含まなければならない
 
 ## Cold Start 条件

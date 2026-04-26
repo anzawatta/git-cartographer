@@ -108,17 +108,21 @@ def cochange_pairs(
     repo_path: str,
     since_hash: str | None = None,
     until_hash: str = "HEAD",
+    window: int = 100,
 ) -> dict[tuple[str, str], int]:
     """
     同一コミットで同時変更されたファイルペアとその頻度を返す。
     ペアは (小さい方, 大きい方) でソートされたタプル。
+
+    since_hash が指定された場合は since_hash..until_hash の範囲を解析する。
+    指定されない場合は最新 window コミットを解析する。
     """
     log_args = ["log", "--name-only", "--format=COMMIT:%H"]
 
     if since_hash:
         log_args += [f"{since_hash}..{until_hash}"]
     else:
-        log_args += [until_hash]
+        log_args += [f"-{window}", until_hash]
 
     output = _run_git(log_args, repo_path)
 

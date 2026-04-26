@@ -85,11 +85,11 @@ def build_hotspots(
 
 def _scan_info_header(scan_info: dict) -> str:
     """スキャン情報ヘッダーを生成する。"""
-    lines = []
-    mode = scan_info.get("mode", "unknown")
+    window = scan_info.get("window", "unknown")
     head_hash = scan_info.get("head_hash", "unknown")
     generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
-    lines.append(f"- **Mode**: {mode}")
+    lines = []
+    lines.append(f"- **Window**: {window} commits")
     lines.append(f"- **HEAD**: `{head_hash[:12] if len(head_hash) > 12 else head_hash}`")
     lines.append(f"- **Generated**: {generated_at}")
     return "\n".join(lines)
@@ -242,7 +242,6 @@ def render_cochange_jsonl(structure_data: dict, scan_info: dict) -> str:
       sample_size: int   (同時変更コミット数)
     """
     head_hash = scan_info.get("head_hash", "unknown")
-    since_hash = scan_info.get("since_hash", None)
     generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
     halflife_commits = scan_info.get("halflife_commits", 90)
     cochange_top: list[tuple[str, str, int]] = structure_data.get("cochange_top", [])
@@ -250,7 +249,7 @@ def render_cochange_jsonl(structure_data: dict, scan_info: dict) -> str:
     meta = {
         "_type": "meta",
         "head": head_hash,
-        "range": {"from": since_hash, "to": head_hash},
+        "window": scan_info.get("window", 100),
         "generated_at": generated_at,
         "halflife_commits": halflife_commits,
     }
