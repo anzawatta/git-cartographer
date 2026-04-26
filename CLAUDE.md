@@ -31,7 +31,7 @@ git churn × AST依存解析（静的測量）と Claude Code の踏破軌跡（
 - `.cartographer_traverse_log.yml` — Hooks が副作用を持つ唯一のファイル（スコア記録・減衰）
 
 ### Components
-<!-- 詳細 → logs/components/git-cartographer/（都度生成） -->
+<!-- 機械検出結果は logs/maps/git-cartographer/map.md の「コンポーネント」セクション参照 -->
 - `Measurement` — git churn × AST 依存解析 + 構造的境界抽出。LLM ゼロ、副作用なし（git_scanner, ast_scanner, components）
 - `Synthesis`   — 3層地図合成 + skeleton.json 生成（layers, skeleton）
 - `Config`      — TOML 読み込み + 組込デフォルト管理（config）
