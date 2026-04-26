@@ -41,9 +41,11 @@ uv run python -m src.cartographer /path/to/your/repo
 
 ```bash
 uv run python -m src.cartographer /path/to/repo \
-  --output-dir output \          # 出力先ディレクトリ（リポジトリ相対）
+  --output-dir output \          # 出力先ディレクトリ（リポジトリ相対、デフォルト: output）
   --output-dir /absolute/path \  # 絶対パス指定も可（リポジトリ外に出力）
-  --window 100                   # フルスキャン時に参照するコミット数
+  --window 100 \                 # スキャンする最新コミット数（デフォルト: 100）
+  --markdown \                   # Markdown ファイルも生成する（デフォルト: 生成しない）
+  --halflife-commits 90          # co-change の半減期（コミット数、デフォルト: 90）
 ```
 
 ### 複数リポジトリをまとめて解析する例
@@ -57,13 +59,18 @@ done
 
 ### 出力ファイル
 
-実行後、`output/` 配下に以下の Markdown ファイルが生成される：
+実行後、`output/` 配下に以下のファイルが生成される：
 
-| ファイル | 内容 |
-|---------|------|
-| `output/stable.md` | 変更頻度ゼロの安定ファイル一覧 |
-| `output/structure.md` | co-change ペア・import グラフ・ハブファイル |
-| `output/hotspots.md` | churn 上位ファイル（変更頻度ランキング） |
+JSON / JSONL が canonical 出力。Markdown は `--markdown` 指定時のみ生成される。
+
+| ファイル | 形式 | 内容 |
+|---------|------|------|
+| `output/hotspot.json` | JSON | churn 上位ファイル（変更頻度ランキング） |
+| `output/co-change.jsonl` | NDJSON | co-change ペア（1行1エッジ） |
+| `output/stable.json` | JSON | 変更頻度ゼロの安定ファイル一覧 |
+| `output/hotspot.md` | Markdown | hotspot の人間向け閲覧用（`--markdown` opt-in） |
+| `output/co-change.md` | Markdown | co-change の人間向け閲覧用（`--markdown` opt-in） |
+| `output/stable.md` | Markdown | stable の人間向け閲覧用（`--markdown` opt-in） |
 
 ---
 
@@ -109,13 +116,15 @@ PostToolUse / PreToolUse フックを `.claude/settings.json` に登録するこ
 
 ## `.cartographer_state` のリセット方法
 
-差分モードをリセットし、次回実行時にフルスキャンを強制する：
+`.cartographer_state` は HEAD 未変更時のスキップ最適化に使われる。
+削除すると、次回実行時に最新 `window` コミットの再スキャンが強制される。
 
 ```bash
 rm /path/to/repo/.cartographer_state
 ```
 
-ファイルを削除した状態で `cartographer` を実行すると、リポジトリ全体が再スキャンされる。
+> `window` の値を変更しても次コミット時に自動的に再スキャンされるため、
+> 通常は手動削除は不要。
 
 ---
 

@@ -35,23 +35,28 @@ def build_stable(churn_counts: dict[str, int], threshold: int = 0) -> list[str]:
 # @see EARS-001#REQ-U002
 def build_structure(
     churn_counts: dict[str, int],
-    cochange_pairs: dict[tuple[str, str], int],
+    cochange_pairs: dict[tuple[str, str], dict],
     import_graph: dict[str, list[str]],
     include_stdlib: bool = False,
 ) -> dict:
     """
     依存関係サマリを構築する。
 
+    cochange_pairs は {"count": int, "last_hash": str} の dict を値に持つ形式。
+
     Returns:
         {
-            "cochange_top": [(file_a, file_b, count), ...],  # 上位 co-change ペア
-            "import_graph": {file: [deps, ...]},             # import 依存グラフ
-            "hub_files": [(file, dep_count), ...],           # 被参照数上位ファイル
+            "cochange_top": [(file_a, file_b, count, last_hash), ...],  # 上位 co-change ペア
+            "import_graph": {file: [deps, ...]},                        # import 依存グラフ
+            "hub_files": [(file, dep_count), ...],                      # 被参照数上位ファイル
         }
     """
     # co-change 上位 20 ペアを抽出
-    sorted_pairs = sorted(cochange_pairs.items(), key=lambda x: x[1], reverse=True)
-    cochange_top = [(a, b, cnt) for (a, b), cnt in sorted_pairs[:20]]
+    sorted_pairs = sorted(cochange_pairs.items(), key=lambda x: x[1]["count"], reverse=True)
+    cochange_top = [
+        (a, b, info["count"], info["last_hash"])
+        for (a, b), info in sorted_pairs[:20]
+    ]
 
     # 被参照数（どのファイルから import されているか）を集計
     # デフォルトで stdlib を除外し、プロジェクト内モジュールのみを対象とする
@@ -152,7 +157,7 @@ def render_structure(structure_data: dict, scan_info: dict) -> str:
     else:
         lines.append("| File A | File B | Count |")
         lines.append("|--------|--------|-------|")
-        for a, b, cnt in cochange_top:
+        for a, b, cnt, _last_hash in cochange_top:
             lines.append(f"| `{a}` | `{b}` | {cnt} |")
     lines.append("")
 
@@ -228,23 +233,30 @@ def render_hotspots(hotspots_data: list[tuple[str, int]], scan_info: dict) -> st
 
 # @see EARS-001#REQ-U001
 # @see EARS-001#REQ-C001
-def render_cochange_jsonl(structure_data: dict, scan_info: dict) -> str:
+def render_cochange_jsonl(
+    structure_data: dict,
+    scan_info: dict,
+    cochange_weight_map: dict[tuple[str, str], dict] | None = None,
+) -> str:
     """
     NDJSON 形式の co-change データを返す（1行1エッジ）。
 
     1行目はメタ行:
-      {"_type":"meta","head":"<hash>","range":{"from":"<since_hash or null>","to":"<head_hash>"},"generated_at":"<ISO8601>","halflife_commits":<int>}
+      {"_type":"meta","head":"<hash>","window":<int>,"generated_at":"<ISO8601>","halflife_commits":<int>}
 
     各データ行は以下のフィールドを持つ:
       pair: [file_a, file_b]
-      effective_weight: null (計算は別タスク)
-      last_cochange_hash: null (計算は別タスク)
-      sample_size: int   (同時変更コミット数)
+      effective_weight: float | null  (halflife_commits 減衰を適用した重み。計算失敗時は null)
+      last_cochange_hash: str | null  (最後に co-change が発生したコミットハッシュ。不明時は null)
+      sample_size: int                (同時変更コミット数)
+
+    cochange_weight_map が渡された場合、effective_weight と last_cochange_hash を実値に差し替える。
+    形式: {(file_a, file_b): {"effective_weight": float | None, "last_cochange_hash": str | None}}
     """
     head_hash = scan_info.get("head_hash", "unknown")
     generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
     halflife_commits = scan_info.get("halflife_commits", 90)
-    cochange_top: list[tuple[str, str, int]] = structure_data.get("cochange_top", [])
+    cochange_top: list[tuple[str, str, int, str]] = structure_data.get("cochange_top", [])
 
     meta = {
         "_type": "meta",
@@ -255,11 +267,13 @@ def render_cochange_jsonl(structure_data: dict, scan_info: dict) -> str:
     }
 
     lines = [json.dumps(meta, ensure_ascii=False)]
-    for file_a, file_b, count in cochange_top:
+    for entry in cochange_top:
+        file_a, file_b, count = entry[0], entry[1], entry[2]
+        weight_info = cochange_weight_map.get((file_a, file_b)) if cochange_weight_map else None
         record = {
             "pair": [file_a, file_b],
-            "effective_weight": None,
-            "last_cochange_hash": None,
+            "effective_weight": weight_info["effective_weight"] if weight_info else None,
+            "last_cochange_hash": weight_info["last_cochange_hash"] if weight_info else None,
             "sample_size": count,
         }
         lines.append(json.dumps(record, ensure_ascii=False))

@@ -180,12 +180,28 @@ def run(
     structure_data = layers.build_structure(churn, cochange, import_graph, include_stdlib=include_stdlib)
     hotspots_data = layers.build_hotspots(churn, top_n=20)
 
+    # effective_weight 計算（top20 ペア分）
+    print("[cartographer] Computing effective_weight for co-change pairs...")
+    cochange_top = structure_data.get("cochange_top", [])
+    cochange_weight_map: dict[tuple[str, str], dict] = {}
+    for a, b, cnt, last_hash in cochange_top:
+        try:
+            commits_elapsed = git_scanner.count_commits_between(repo_path, last_hash, head_hash)
+            ew = cnt * (0.5 ** (commits_elapsed / halflife_commits))
+        except Exception as e:
+            print(f"[cartographer] effective_weight計算失敗 ({a}, {b}): {e}", file=sys.stderr)
+            ew = None
+        cochange_weight_map[(a, b)] = {
+            "effective_weight": ew,
+            "last_cochange_hash": last_hash if last_hash else None,
+        }
+
     # 出力書き出し
     print("[cartographer] Writing output...")
 
     # JSON canonical 出力（常時生成）
     # @see EARS-001#REQ-U001
-    _write_file(output_dir, "co-change.jsonl", layers.render_cochange_jsonl(structure_data, scan_info))
+    _write_file(output_dir, "co-change.jsonl", layers.render_cochange_jsonl(structure_data, scan_info, cochange_weight_map))
     _write_file(output_dir, "hotspot.json", layers.render_hotspot_json(hotspots_data, scan_info))
     _write_file(output_dir, "stable.json", layers.render_stable_json(stable_files, scan_info))
 
@@ -229,7 +245,7 @@ def main() -> None:
         "--window",
         type=int,
         default=100,
-        help="フルスキャン時に参照するコミット数（デフォルト: 100）",
+        help="スキャンする最新コミット数（デフォルト: 100）",
     )
     parser.add_argument(
         "--include-stdlib",
