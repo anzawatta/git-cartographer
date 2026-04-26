@@ -1,5 +1,5 @@
 """
-3層地図生成（stable / structure / hotspots）。
+3層地図生成（stable / co-change / hotspot）。
 
 各層を Markdown 文字列または JSON 文字列として生成する。
 """

@@ -224,8 +224,8 @@ def run(
 
     # @see EARS-001#REQ-U001
     _write_markdown(output_dir, "stable.md", layers.render_stable(stable_files, scan_info))
-    _write_markdown(output_dir, "structure.md", layers.render_structure(structure_data, scan_info))
-    _write_markdown(output_dir, "hotspots.md", layers.render_hotspots(hotspots_data, scan_info))
+    _write_markdown(output_dir, "co-change.md", layers.render_structure(structure_data, scan_info))
+    _write_markdown(output_dir, "hotspot.md", layers.render_hotspots(hotspots_data, scan_info))
 
     # JSON canonical 出力（Markdown と並行生成）
     # @see EARS-001#REQ-U001
