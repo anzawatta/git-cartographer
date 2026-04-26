@@ -1,7 +1,8 @@
 """
 git-cartographer エントリーポイント。
 
-フルスキャン / 差分スキャンを判定し、3層地図を生成する。
+常に最新 window コミットをスキャンし、3層地図を生成する。
+.cartographer_state は HEAD 未変更時のスキップ最適化としてのみ使用する。
 """
 
 from __future__ import annotations
@@ -45,21 +46,6 @@ def _build_import_graph(
             if imports:
                 graph[rel_path] = imports
     return graph
-
-
-def _load_previous_stable(output_dir: str) -> list[str]:
-    """
-    前回生成した stable.json から安定ファイルリストを読み込む。
-
-    stable.json の load_bearing[].path フィールドを抽出する。
-    ファイルが存在しない場合は空リストを返す。
-    """
-    stable_path = os.path.join(output_dir, "stable.json")
-    if not os.path.isfile(stable_path):
-        return []
-    with open(stable_path, encoding="utf-8") as f:
-        data = json.load(f)
-    return [entry["path"] for entry in data.get("load_bearing", []) if "path" in entry]
 
 
 def _all_tracked_files(repo_path: str) -> list[str]:
@@ -130,35 +116,31 @@ def run(
 
     print(f"[cartographer] HEAD: {head_hash[:12]}")
 
-    # スキャンモード判定
-    last_hash = state.get_last_hash(repo_path)
-
+    # スキップ判定: HEAD が前回と同じなら何もしない
     # @see EARS-001#REQ-S001
-    if last_hash is None:
-        print("[cartographer] Mode: FULL SCAN (no state file)")
-        scan_mode = "full"
-        since_hash = None
+    last_hash = state.get_last_hash(repo_path)
+    if last_hash == head_hash:
+        print("[cartographer] HEAD unchanged. Skipping.")
+        return
+
+    # 常に window ベースのスキャン（インクリメンタルモードを廃止）
     # @see EARS-001#REQ-S002
-    else:
-        print(f"[cartographer] Mode: INCREMENTAL (since {last_hash[:12]})")
-        scan_mode = "incremental"
-        since_hash = last_hash
+    print(f"[cartographer] Scanning last {window} commits (HEAD: {head_hash[:12]})")
 
     generated_at = datetime.now(timezone.utc).isoformat()
     scan_info = {
-        "mode": scan_mode,
+        "window": window,
         "head_hash": head_hash,
-        "since_hash": since_hash,
         "generated_at": generated_at,
         "halflife_commits": halflife_commits,
     }
 
-    # git churn 分析
+    # git churn 分析（since_hash=None で常に window ベース）
     print("[cartographer] Analyzing churn...")
     try:
         churn = git_scanner.churn_counts(
             repo_path,
-            since_hash=since_hash,
+            since_hash=None,
             until_hash="HEAD",
             window=window,
         )
@@ -166,45 +148,25 @@ def run(
         print(f"[ERROR] churn analysis failed: {e}", file=sys.stderr)
         churn = {}
 
-    # co-change 分析
+    # co-change 分析（window パラメータを渡す）
     print("[cartographer] Analyzing co-change pairs...")
     try:
         cochange = git_scanner.cochange_pairs(
             repo_path,
-            since_hash=since_hash,
+            since_hash=None,
             until_hash="HEAD",
+            window=window,
         )
     except RuntimeError as e:
         print(f"[WARNING] co-change analysis failed: {e}", file=sys.stderr)
         cochange = {}
 
-    # 解析対象ファイルリストを構築
-    if scan_mode == "full":
-        file_list = _all_tracked_files(repo_path)
-    else:
-        try:
-            file_list = git_scanner.diff_files(repo_path, since_hash, "HEAD")
-        except RuntimeError as e:
-            print(f"[WARNING] diff_files failed: {e}", file=sys.stderr)
-            file_list = []
-
+    # 全追跡ファイルを対象に、churn=0 を補完（安定ファイル検出のため）
     # @see EARS-001#REQ-S003
-    # フルスキャン時: 全追跡ファイルのうち churn=0 のものを stable 候補として補完
-    # incremental 時: 既存 stable リストから今回変更されたファイルを除外して引き継ぐ
-    if scan_mode == "full":
-        for f in file_list:
-            if f not in churn:
-                churn[f] = 0
-    else:
-        # 前回の stable.json から既存の stable ファイルリストを読み込む
-        previous_stable = _load_previous_stable(output_dir)
-        # 今回変更されたファイルを stable から除外（0 超の churn を持つ）
-        changed_files = set(f for f, cnt in churn.items() if cnt > 0)
-        surviving_stable = [f for f in previous_stable if f not in changed_files]
-        # surviving_stable を churn dict に churn=0 として登録（build_stable が認識できるよう）
-        for f in surviving_stable:
-            if f not in churn:
-                churn[f] = 0
+    file_list = _all_tracked_files(repo_path)
+    for f in file_list:
+        if f not in churn:
+            churn[f] = 0
 
     # AST 依存グラフ構築
     print(f"[cartographer] Building import graph ({len(file_list)} files)...")
