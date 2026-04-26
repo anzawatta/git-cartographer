@@ -1,11 +1,12 @@
 """
 3層地図生成（stable / structure / hotspots）。
 
-各層を Markdown 文字列として生成する。
+各層を Markdown 文字列または JSON 文字列として生成する。
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import datetime, timezone
 
@@ -219,3 +220,121 @@ def render_hotspots(hotspots_data: list[tuple[str, int]], scan_info: dict) -> st
 
     lines.append("")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# JSON / JSONL canonical 出力
+# ---------------------------------------------------------------------------
+
+# @see EARS-001#REQ-U001
+# @see EARS-001#REQ-C001
+def render_cochange_jsonl(structure_data: dict, scan_info: dict) -> str:
+    """
+    NDJSON 形式の co-change データを返す（1行1エッジ）。
+
+    各行は以下のフィールドを持つ:
+      pair: [file_a, file_b]
+      sample_size: int   (同時変更コミット数)
+      halflife_days: null  (計算不能のため null)
+      decay_factor: null   (計算不能のため null)
+      effective_weight: null (計算不能のため null)
+      generated_at: ISO8601
+    """
+    generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
+    cochange_top: list[tuple[str, str, int]] = structure_data.get("cochange_top", [])
+
+    lines = []
+    for file_a, file_b, count in cochange_top:
+        record = {
+            "pair": [file_a, file_b],
+            "sample_size": count,
+            "halflife_days": None,
+            "decay_factor": None,
+            "effective_weight": None,
+            "generated_at": generated_at,
+        }
+        lines.append(json.dumps(record, ensure_ascii=False))
+
+    return "\n".join(lines)
+
+
+# @see EARS-001#REQ-U001
+# @see EARS-001#REQ-C002
+def render_hotspot_json(hotspots_data: list[tuple[str, int]], scan_info: dict) -> str:
+    """
+    hotspot.json の JSON 文字列を返す。
+
+    {
+      "generated_at": ISO8601,
+      "halflife_days": null,
+      "ranking": [
+        {
+          "path": str,
+          "churn_rate": int,
+          "rank": int,
+          "complexity": null,
+          "hotspot_score": null,
+          "trend": null
+        },
+        ...
+      ]
+    }
+    """
+    generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
+
+    ranking = []
+    for i, (path, churn_count) in enumerate(hotspots_data, 1):
+        ranking.append({
+            "path": path,
+            "churn_rate": churn_count,
+            "rank": i,
+            "complexity": None,
+            "hotspot_score": None,
+            "trend": None,
+        })
+
+    payload = {
+        "generated_at": generated_at,
+        "halflife_days": None,
+        "ranking": ranking,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+# @see EARS-001#REQ-U001
+# @see EARS-001#REQ-C003
+def render_stable_json(files: list[str], scan_info: dict) -> str:
+    """
+    stable.json の JSON 文字列を返す。
+
+    {
+      "generated_at": ISO8601,
+      "load_bearing": [
+        {
+          "path": str,
+          "stability_score": null,
+          "incoming_dependencies": null,
+          "last_significant_change": null,
+          "warning": null
+        },
+        ...
+      ]
+    }
+    """
+    generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
+
+    load_bearing = []
+    for path in files:
+        load_bearing.append({
+            "path": path,
+            "stability_score": None,
+            "incoming_dependencies": None,
+            "last_significant_change": None,
+            "warning": None,
+        })
+
+    payload = {
+        "generated_at": generated_at,
+        "load_bearing": load_bearing,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)

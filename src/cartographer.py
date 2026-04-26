@@ -19,12 +19,16 @@ def _resolve_output_dir(output_dir: str) -> str:
     return output_dir
 
 
-def _write_markdown(output_dir: str, filename: str, content: str) -> None:
+def _write_file(output_dir: str, filename: str, content: str) -> None:
     # @see EARS-001#REQ-U001
     path = os.path.join(output_dir, filename)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"  Written: {path}")
+
+
+# Alias for backward compatibility and clarity
+_write_markdown = _write_file
 
 
 def _build_import_graph(
@@ -105,11 +109,28 @@ def run(
     print(f"[cartographer] repo: {repo_path}")
 
     # HEAD ハッシュを取得
+    # @see EARS-001#REQ-C001
+    # @see EARS-001#REQ-C002
+    # @see EARS-001#REQ-C003
     try:
         head_hash = git_scanner.get_head_hash(repo_path)
     except RuntimeError as e:
-        print(f"[ERROR] git rev-parse failed: {e}", file=sys.stderr)
-        sys.exit(1)
+        print(f"[WARNING] git rev-parse failed (no history?): {e}", file=sys.stderr)
+        print("[cartographer] Cold start: no git history detected. Writing empty JSON outputs.")
+        import json
+        from datetime import datetime, timezone
+        generated_at = datetime.now(timezone.utc).isoformat()
+        _write_file(output_dir, "co-change.jsonl", "")
+        _write_file(output_dir, "hotspot.json", json.dumps(
+            {"status": "no_history", "generated_at": generated_at, "ranking": []},
+            ensure_ascii=False, indent=2,
+        ))
+        _write_file(output_dir, "stable.json", json.dumps(
+            {"status": "no_history", "generated_at": generated_at, "load_bearing": []},
+            ensure_ascii=False, indent=2,
+        ))
+        print("[cartographer] Done (cold start).")
+        return
 
     print(f"[cartographer] HEAD: {head_hash[:12]}")
 
@@ -206,6 +227,12 @@ def run(
     _write_markdown(output_dir, "stable.md", layers.render_stable(stable_files, scan_info))
     _write_markdown(output_dir, "structure.md", layers.render_structure(structure_data, scan_info))
     _write_markdown(output_dir, "hotspots.md", layers.render_hotspots(hotspots_data, scan_info))
+
+    # JSON canonical 出力（Markdown と並行生成）
+    # @see EARS-001#REQ-U001
+    _write_file(output_dir, "co-change.jsonl", layers.render_cochange_jsonl(structure_data, scan_info))
+    _write_file(output_dir, "hotspot.json", layers.render_hotspot_json(hotspots_data, scan_info))
+    _write_file(output_dir, "stable.json", layers.render_stable_json(stable_files, scan_info))
 
     # 踏破録の減衰更新
     print("[cartographer] Decaying traverse_log entries...")
