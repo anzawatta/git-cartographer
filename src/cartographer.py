@@ -49,22 +49,17 @@ def _build_import_graph(
 
 def _load_previous_stable(output_dir: str) -> list[str]:
     """
-    前回生成した stable.md から安定ファイルリストを読み込む。
+    前回生成した stable.json から安定ファイルリストを読み込む。
 
-    stable.md 内の `- \`filepath\`` 形式の行を解析する。
+    stable.json の load_bearing[].path フィールドを抽出する。
     ファイルが存在しない場合は空リストを返す。
     """
-    stable_path = os.path.join(output_dir, "stable.md")
+    stable_path = os.path.join(output_dir, "stable.json")
     if not os.path.isfile(stable_path):
         return []
-    files: list[str] = []
     with open(stable_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            # "- `filepath`" パターンを抽出
-            if line.startswith("- `") and line.endswith("`"):
-                files.append(line[3:-1])
-    return files
+        data = json.load(f)
+    return [entry["path"] for entry in data.get("load_bearing", []) if "path" in entry]
 
 
 def _all_tracked_files(repo_path: str) -> list[str]:
@@ -89,6 +84,7 @@ def run(
     output_dir: str,
     window: int = 100,
     include_stdlib: bool = False,
+    markdown: bool = False,
 ) -> None:
     """
     地図生成のメインロジック。
@@ -98,7 +94,7 @@ def run(
     3. ast_scanner で依存・面積取得
     4. layers で3層地図生成
     5. traverse_log.decay_all で踏破録更新
-    6. output/ に Markdown 書き出し
+    6. output/ に JSON 書き出し（常時）、Markdown 書き出し（markdown=True 時のみ）
     7. state.set_last_hash() 更新
     """
     repo_path = os.path.abspath(repo_path)
@@ -197,7 +193,7 @@ def run(
             if f not in churn:
                 churn[f] = 0
     else:
-        # 前回の stable.md から既存の stable ファイルリストを読み込む
+        # 前回の stable.json から既存の stable ファイルリストを読み込む
         previous_stable = _load_previous_stable(output_dir)
         # 今回変更されたファイルを stable から除外（0 超の churn を持つ）
         changed_files = set(f for f, cnt in churn.items() if cnt > 0)
@@ -219,19 +215,21 @@ def run(
     structure_data = layers.build_structure(churn, cochange, import_graph, include_stdlib=include_stdlib)
     hotspots_data = layers.build_hotspots(churn, top_n=20)
 
-    # Markdown 書き出し
+    # 出力書き出し
     print("[cartographer] Writing output...")
 
-    # @see EARS-001#REQ-U001
-    _write_markdown(output_dir, "stable.md", layers.render_stable(stable_files, scan_info))
-    _write_markdown(output_dir, "co-change.md", layers.render_structure(structure_data, scan_info))
-    _write_markdown(output_dir, "hotspot.md", layers.render_hotspots(hotspots_data, scan_info))
-
-    # JSON canonical 出力（Markdown と並行生成）
+    # JSON canonical 出力（常時生成）
     # @see EARS-001#REQ-U001
     _write_file(output_dir, "co-change.jsonl", layers.render_cochange_jsonl(structure_data, scan_info))
     _write_file(output_dir, "hotspot.json", layers.render_hotspot_json(hotspots_data, scan_info))
     _write_file(output_dir, "stable.json", layers.render_stable_json(stable_files, scan_info))
+
+    # Markdown 出力（--markdown フラグ指定時のみ）
+    if markdown:
+        # @see EARS-001#REQ-U001
+        _write_markdown(output_dir, "stable.md", layers.render_stable(stable_files, scan_info))
+        _write_markdown(output_dir, "co-change.md", layers.render_structure(structure_data, scan_info))
+        _write_markdown(output_dir, "hotspot.md", layers.render_hotspots(hotspots_data, scan_info))
 
     # 踏破録の減衰更新
     print("[cartographer] Decaying traverse_log entries...")
@@ -274,9 +272,15 @@ def main() -> None:
         default=False,
         help="Hub Files に標準ライブラリを含める（デフォルト: 除外）",
     )
+    parser.add_argument(
+        "--markdown",
+        action="store_true",
+        default=False,
+        help="Markdown ファイル（stable.md, co-change.md, hotspot.md）を生成する（デフォルト: 生成しない）",
+    )
 
     args = parser.parse_args()
-    run(args.repo_path, args.output_dir, args.window, include_stdlib=args.include_stdlib)
+    run(args.repo_path, args.output_dir, args.window, include_stdlib=args.include_stdlib, markdown=args.markdown)
 
 
 if __name__ == "__main__":
