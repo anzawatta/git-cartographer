@@ -109,13 +109,17 @@ def cochange_pairs(
     since_hash: str | None = None,
     until_hash: str = "HEAD",
     window: int = 100,
-) -> dict[tuple[str, str], int]:
+) -> dict[tuple[str, str], dict]:
     """
-    同一コミットで同時変更されたファイルペアとその頻度を返す。
+    同一コミットで同時変更されたファイルペアとその頻度・最終共変コミットを返す。
     ペアは (小さい方, 大きい方) でソートされたタプル。
 
     since_hash が指定された場合は since_hash..until_hash の範囲を解析する。
     指定されない場合は最新 window コミットを解析する。
+
+    Returns:
+        dict[tuple[str, str], dict]: キーはペア、値は {"count": int, "last_hash": str}
+        git log は新しい順に出力されるため、ペアが最初に登場したコミットハッシュ = 最新の co-change コミット。
     """
     log_args = ["log", "--name-only", "--format=COMMIT:%H"]
 
@@ -126,8 +130,10 @@ def cochange_pairs(
 
     output = _run_git(log_args, repo_path)
 
-    pairs: dict[tuple[str, str], int] = defaultdict(int)
+    pair_counts: dict[tuple[str, str], int] = defaultdict(int)
+    pair_last_hash: dict[tuple[str, str], str] = {}
     current_files: list[str] = []
+    current_hash: str = ""
 
     for line in output.splitlines():
         line = line.strip()
@@ -135,7 +141,11 @@ def cochange_pairs(
             # 前のコミットのペアを集計
             if len(current_files) > 1:
                 for a, b in combinations(sorted(current_files), 2):
-                    pairs[(a, b)] += 1
+                    pair_counts[(a, b)] += 1
+                    # git log は新しい順なので、ペア初出現 = 最新の co-change コミット
+                    if (a, b) not in pair_last_hash:
+                        pair_last_hash[(a, b)] = current_hash
+            current_hash = line[len("COMMIT:"):]
             current_files = []
         elif line:
             current_files.append(line)
@@ -143,6 +153,11 @@ def cochange_pairs(
     # 最後のコミット分
     if len(current_files) > 1:
         for a, b in combinations(sorted(current_files), 2):
-            pairs[(a, b)] += 1
+            pair_counts[(a, b)] += 1
+            if (a, b) not in pair_last_hash:
+                pair_last_hash[(a, b)] = current_hash
 
-    return dict(pairs)
+    return {
+        pair: {"count": count, "last_hash": pair_last_hash.get(pair, "")}
+        for pair, count in pair_counts.items()
+    }
