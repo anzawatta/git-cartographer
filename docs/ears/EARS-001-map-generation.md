@@ -3,7 +3,7 @@
 **Status:** Draft
 **Date:** 2026-04-12
 **Updated:** 2026-04-26
-**Related ADR:** ADR-001
+**Related ADR:** ADR-001 ADR-002
 
 ## 不変条件
 

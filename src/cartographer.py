@@ -123,7 +123,7 @@ def run(
         print("[cartographer] HEAD unchanged. Skipping.")
         return
 
-    # 常に window ベースのスキャン（インクリメンタルモードを廃止）
+    # 常に window ベースのスキャン
     # @see EARS-001#REQ-S002
     print(f"[cartographer] Scanning last {window} commits (HEAD: {head_hash[:12]})")
 
