@@ -9,6 +9,5 @@ output/*
 !output/.gitkeep
 .cartographer_state
 
-# skeleton.json は on-demand 生成（steward から呼び出し時のみ）。チームで共有しない。
-# output/* で既に除外済みだが、設計意図を明示するため追記。
-output/skeleton.json
+# 設定ファイル
+.cartographer.toml

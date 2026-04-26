@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 CONFIG_FILE = ".cartographer.toml"
 
-# 組込デフォルト: 多くの ward でノーアクションで動くよう、典型的なソース境界を網羅する
+# 組込デフォルト: 多くのリポジトリでノーアクションで動くよう、典型的なソース境界を網羅する
 DEFAULT_SCAN_DIRS: list[str] = [
     "src",
     "lib",

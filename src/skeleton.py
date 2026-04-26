@@ -2,7 +2,7 @@
 skeleton.json 合成モジュール。
 
 on-demand のみ呼び出す（cartographer の run() からは自動呼び出ししない）。
-steward が seed と policy を必ず渡すこと。
+orchestrator が seed と policy を必ず渡すこと。
 cartographer はデフォルト seed を自分で決定しない。
 """
 
@@ -59,13 +59,13 @@ def synthesize_skeleton(
     """
     seed ファイル一覧と policy に基づいて skeleton.json を合成して返す。
 
-    呼び出し側（steward）が seed と policy を必ず渡す。
+    呼び出し側が seed と policy を必ず渡す。
     cartographer はデフォルト seed を決定しない。
 
     Parameters
     ----------
     seed : list[str]
-        起点となるファイルパス一覧。steward が決定する。
+        起点となるファイルパス一覧。orchestrator が決定する。
     policy : dict
         合成ポリシー。以下のキーを受け付ける:
           cochange_threshold : float  co-change effective_weight の閾値（未満は除外）
