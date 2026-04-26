@@ -245,7 +245,7 @@ def main() -> None:
         "--window",
         type=int,
         default=100,
-        help="フルスキャン時に参照するコミット数（デフォルト: 100）",
+        help="スキャンする最新コミット数（デフォルト: 100）",
     )
     parser.add_argument(
         "--include-stdlib",
