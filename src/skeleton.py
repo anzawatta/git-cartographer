@@ -108,7 +108,6 @@ def synthesize_skeleton(
     ]
 
     # seed ファイルに関係するエッジのみ抽出（max_depth=0 の場合は seed のみ）
-    seed_set: set[str] = set(seed)
     relevant_files: set[str] = set(seed)
 
     if max_depth > 0:

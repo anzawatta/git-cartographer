@@ -7,6 +7,7 @@ git-cartographer エントリーポイント。
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from datetime import datetime, timezone
@@ -117,8 +118,6 @@ def run(
     except RuntimeError as e:
         print(f"[WARNING] git rev-parse failed (no history?): {e}", file=sys.stderr)
         print("[cartographer] Cold start: no git history detected. Writing empty JSON outputs.")
-        import json
-        from datetime import datetime, timezone
         generated_at = datetime.now(timezone.utc).isoformat()
         _write_file(output_dir, "co-change.jsonl", "")
         _write_file(output_dir, "hotspot.json", json.dumps(
