@@ -233,7 +233,7 @@ def render_cochange_jsonl(structure_data: dict, scan_info: dict) -> str:
     NDJSON 形式の co-change データを返す（1行1エッジ）。
 
     1行目はメタ行:
-      {"_type":"meta","head":"<hash>","range":{"from":"<since_hash or null>","to":"<head_hash>"},"generated_at":"<ISO8601>","halflife_days":<int>}
+      {"_type":"meta","head":"<hash>","range":{"from":"<since_hash or null>","to":"<head_hash>"},"generated_at":"<ISO8601>","halflife_commits":<int>}
 
     各データ行は以下のフィールドを持つ:
       pair: [file_a, file_b]
@@ -244,7 +244,7 @@ def render_cochange_jsonl(structure_data: dict, scan_info: dict) -> str:
     head_hash = scan_info.get("head_hash", "unknown")
     since_hash = scan_info.get("since_hash", None)
     generated_at = scan_info.get("generated_at", datetime.now(timezone.utc).isoformat())
-    halflife_days = scan_info.get("halflife_days", 90)
+    halflife_commits = scan_info.get("halflife_commits", 90)
     cochange_top: list[tuple[str, str, int]] = structure_data.get("cochange_top", [])
 
     meta = {
@@ -252,7 +252,7 @@ def render_cochange_jsonl(structure_data: dict, scan_info: dict) -> str:
         "head": head_hash,
         "range": {"from": since_hash, "to": head_hash},
         "generated_at": generated_at,
-        "halflife_days": halflife_days,
+        "halflife_commits": halflife_commits,
     }
 
     lines = [json.dumps(meta, ensure_ascii=False)]
@@ -276,7 +276,7 @@ def render_hotspot_json(hotspots_data: list[tuple[str, int]], scan_info: dict) -
 
     {
       "generated_at": ISO8601,
-      "halflife_days": null,
+      "halflife_commits": null,
       "ranking": [
         {
           "path": str,
@@ -307,7 +307,7 @@ def render_hotspot_json(hotspots_data: list[tuple[str, int]], scan_info: dict) -
     payload = {
         "head": head_hash,
         "generated_at": generated_at,
-        "halflife_days": None,
+        "halflife_commits": None,
         "ranking": ranking,
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
