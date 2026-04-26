@@ -13,7 +13,7 @@ import os
 import sys
 from datetime import datetime, timezone
 
-from src import ast_scanner, git_scanner, layers, traverse_log, state
+from src import ast_scanner, components as components_axis, config as config_module, git_scanner, layers, traverse_log, state
 
 
 def _resolve_output_dir(output_dir: str) -> str:
@@ -72,6 +72,7 @@ def run(
     include_stdlib: bool = False,
     markdown: bool = False,
     halflife_commits: int = 90,
+    config_path: str | None = None,
 ) -> None:
     """
     地図生成のメインロジック。
@@ -92,6 +93,11 @@ def run(
 
     print(f"[cartographer] repo: {repo_path}")
 
+    # 設定ファイル読み込み（components 軸用 / scan_dirs 取得）
+    # @see ADR-003
+    cfg = config_module.load_config(repo_path, config_path=config_path)
+    print(f"[cartographer] scan_dirs: {cfg.scan_dirs}")
+
     # HEAD ハッシュを取得
     # @see EARS-001#REQ-C001
     # @see EARS-001#REQ-C002
@@ -109,6 +115,16 @@ def run(
         ))
         _write_file(output_dir, "stable.json", json.dumps(
             {"status": "no_history", "generated_at": generated_at, "load_bearing": []},
+            ensure_ascii=False, indent=2,
+        ))
+        # @see ADR-003 — components 軸も cold start で空出力を保証
+        _write_file(output_dir, "components.json", json.dumps(
+            {
+                "status": "no_history",
+                "generated_at": generated_at,
+                "scan_dirs": list(cfg.scan_dirs),
+                "components": [],
+            },
             ensure_ascii=False, indent=2,
         ))
         print("[cartographer] Done (cold start).")
@@ -180,6 +196,17 @@ def run(
     structure_data = layers.build_structure(churn, cochange, import_graph, include_stdlib=include_stdlib)
     hotspots_data = layers.build_hotspots(churn, top_n=20)
 
+    # components 軸（第4軸）: scan_dirs 配下の直下サブディレクトリ一覧
+    # @see ADR-003
+    components_data = components_axis.build_components(repo_path, cfg.scan_dirs)
+    if len(components_data) > components_axis.COMPONENT_WARN_THRESHOLD:
+        print(
+            f"[cartographer] WARNING: components count ({len(components_data)}) "
+            f"exceeds threshold ({components_axis.COMPONENT_WARN_THRESHOLD}). "
+            f"Consider narrowing scan_dirs in .cartographer.toml.",
+            file=sys.stderr,
+        )
+
     # effective_weight 計算（top20 ペア分）
     print("[cartographer] Computing effective_weight for co-change pairs...")
     cochange_top = structure_data.get("cochange_top", [])
@@ -204,6 +231,12 @@ def run(
     _write_file(output_dir, "co-change.jsonl", layers.render_cochange_jsonl(structure_data, scan_info, cochange_weight_map))
     _write_file(output_dir, "hotspot.json", layers.render_hotspot_json(hotspots_data, scan_info))
     _write_file(output_dir, "stable.json", layers.render_stable_json(stable_files, scan_info))
+    # @see ADR-003
+    _write_file(
+        output_dir,
+        "components.json",
+        components_axis.render_components_json(components_data, scan_info, cfg.scan_dirs),
+    )
 
     # Markdown 出力（--markdown フラグ指定時のみ）
     if markdown:
@@ -265,6 +298,14 @@ def main() -> None:
         default=90,
         help="co-change の半減期（コミット数、デフォルト: 90）",
     )
+    parser.add_argument(
+        "--config",
+        default=None,
+        help=(
+            "cartographer 設定 TOML のパス（デフォルト: <repo>/.cartographer.toml、"
+            "存在しない場合は組込デフォルトを使用）"
+        ),
+    )
 
     args = parser.parse_args()
     run(
@@ -274,6 +315,7 @@ def main() -> None:
         include_stdlib=args.include_stdlib,
         markdown=args.markdown,
         halflife_commits=args.halflife_commits,
+        config_path=args.config,
     )
 
 
