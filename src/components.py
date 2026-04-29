@@ -17,6 +17,7 @@ import subprocess
 from datetime import datetime, timezone
 
 # components 数の警告閾値（fail-loud）。150 を超えたら scan_dirs の絞り込みを促す。
+# @see EARS-003#REQ-S002
 COMPONENT_WARN_THRESHOLD: int = 150
 
 
@@ -43,6 +44,11 @@ def _extract_components(
 ) -> list[dict[str, str]]:
     """
     tracked_files から `scan_dirs` 配下の直下サブディレクトリを抽出する。
+
+    @see EARS-003#REQ-U001
+    @see EARS-003#REQ-U002
+    @see EARS-003#REQ-U005
+    @see EARS-003#REQ-U006
 
     例: scan_dirs=["src", "lib"] のとき
       - "src/cartographer/main.py" → ("src", "cartographer", "src/cartographer")

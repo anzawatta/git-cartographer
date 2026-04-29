@@ -1,7 +1,9 @@
 # ADR-003: Components Measurement Axis（第4軸 components.json）
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-04-26
+**Updated:** 2026-04-29
+**Related EARS:** EARS-003
 
 ---
 
@@ -115,7 +117,7 @@ cartographer は **「scan_dirs 配下の直下サブディレクトリ一覧」
 - `--config <path>` CLI オプションが追加され、別パスの toml を指定可能
 - HEAD ベーススキップは 4 ファイル（stable / hotspot / co-change / components）を一括スキップする
 - components 数が 150 を超えた場合は stderr に warning を出す（fail-loud）。`scan_dirs` の絞り込みを利用者に促す
-- 既存 EARS-001 への影響評価は別途行う（components 軸の機械可読要件は別 EARS とすることを想定）
+- 機械可読要件は EARS-003 に記述する（2026-04-29 作成）
 
 ---
 
@@ -132,6 +134,16 @@ cartographer は **「scan_dirs 配下の直下サブディレクトリ一覧」
 - 単一レベル（`"src"` 等）の既存動作は完全に後方互換を保つ。
 - ルール選択（深いパス優先アルゴリズム）は本 ADR の設計判断として記録する。
   実行時は固定アルゴリズム（depth 降順ソート後の先頭マッチ）で機械的に処理する。
+
+#### 2026-04-29: claim セマンティクス（フォールスルー禁止）
+
+- `_extract_components()` のループで、ファイルが scan_dir の prefix にマッチした時点で
+  そのファイルは「claim 済み」となり、より浅い scan_dir にフォールスルーしない設計に固定する。
+- バグ修正の経緯: `scan_dirs=["src/hooks", "src"]` のとき `src/hooks/` 直下にファイルしかない場合、
+  浅い `"src"` にフォールスルーして `"hooks"` という component が誤生成されていた。
+- 修正アルゴリズム: prefix マッチ判定とコンポーネント名抽出を分離し、prefix にマッチしたら
+  コンポーネント化できなくても必ず `break` する。
+- この挙動は EARS-003 REQ-U005 として不変条件化された。
 
 ---
 
