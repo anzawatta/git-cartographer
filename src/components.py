@@ -17,6 +17,7 @@ import subprocess
 from datetime import datetime, timezone
 
 # components 数の警告閾値（fail-loud）。150 を超えたら scan_dirs の絞り込みを促す。
+# @see EARS-003#REQ-S002
 COMPONENT_WARN_THRESHOLD: int = 150
 
 
@@ -44,30 +45,53 @@ def _extract_components(
     """
     tracked_files から `scan_dirs` 配下の直下サブディレクトリを抽出する。
 
+    @see EARS-003#REQ-U001
+    @see EARS-003#REQ-U002
+    @see EARS-003#REQ-U005
+    @see EARS-003#REQ-U006
+
     例: scan_dirs=["src", "lib"] のとき
       - "src/cartographer/main.py" → ("src", "cartographer", "src/cartographer")
       - "lib/foo-stack.ts"          → 直下ファイルなのでスキップ
       - "lambda/handler/index.ts"   → scan_dirs に "lambda" がなければスキップ
+
+    ネストパス対応: scan_dirs に "src/modules" のような深いパスを指定可能。
+      - "src/modules/my-component/index.ts" → ("src/modules", "my-component", "src/modules/my-component")
+    深いパスと浅いパスが重複する場合（例: "src" と "src/modules"）は深いパスが優先される。
+      - "src/modules/foo/bar.ts" → "src/modules" が "src" より優先される
+
+    Claim セマンティクス: ファイルがある scan_dir の prefix にマッチした時点で、
+    そのファイルは「claim 済み」となり、より浅い scan_dir にはフォールスルーしない。
+    例: scan_dirs=["src/hooks", "src"] で "src/hooks/use-foo.ts" は
+    "src/hooks" に claim される（サブディレクトリでないため component にはならないが、
+    "src" にフォールスルーして "hooks" component が誤生成されることもない）。
 
     Returns: 重複除去後、(scan_dir, name) でソートされた dict 一覧
     """
     # path 正規化: TOML の `src/` も `src` も等価扱い
     normalized_scan_dirs = [d.strip("/").rstrip("/") for d in scan_dirs if d.strip("/")]
 
+    # depth 降順にソートして深いパスを優先
+    sorted_scan_dirs = sorted(
+        normalized_scan_dirs, key=lambda d: len(d.split("/")), reverse=True
+    )
+
     seen: set[tuple[str, str]] = set()
     for rel_path in tracked_files:
         # POSIX 区切りで分解（git ls-files は常に "/" を返す）
         parts = rel_path.split("/")
-        if len(parts) < 3:
-            # scan_dir 直下のファイル（例: src/foo.py）は components ではない
-            continue
-        scan_dir = parts[0]
-        if scan_dir not in normalized_scan_dirs:
-            continue
-        name = parts[1]
-        if not name:
-            continue
-        seen.add((scan_dir, name))
+        for scan_dir in sorted_scan_dirs:
+            scan_dir_parts = scan_dir.split("/")
+            depth = len(scan_dir_parts)
+            if len(parts) < depth or parts[:depth] != scan_dir_parts:
+                # この scan_dir の配下ではない
+                continue
+            # この scan_dir に claim される（コンポーネント化できなくても break）
+            if len(parts) >= depth + 2:
+                name = parts[depth]
+                if name:
+                    seen.add((scan_dir, name))
+            break  # 深いパスにマッチしたら浅いパスへフォールスルーしない
 
     components: list[dict[str, str]] = []
     for scan_dir, name in sorted(seen):

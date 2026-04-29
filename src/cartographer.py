@@ -134,6 +134,7 @@ def run(
 
     # スキップ判定: HEAD が前回と同じなら何もしない
     # @see EARS-001#REQ-S001
+    # @see EARS-003#REQ-S001
     last_hash = state.get_last_hash(repo_path)
     if last_hash == head_hash:
         print("[cartographer] HEAD unchanged. Skipping.")
@@ -198,7 +199,9 @@ def run(
 
     # components 軸（第4軸）: scan_dirs 配下の直下サブディレクトリ一覧
     # @see ADR-003
+    # @see EARS-003#REQ-U001
     components_data = components_axis.build_components(repo_path, cfg.scan_dirs)
+    # @see EARS-003#REQ-S002
     if len(components_data) > components_axis.COMPONENT_WARN_THRESHOLD:
         print(
             f"[cartographer] WARNING: components count ({len(components_data)}) "

@@ -147,6 +147,163 @@ class TestExtractComponentsPure(unittest.TestCase):
         )
 
 
+class TestExtractComponentsNestedPaths(unittest.TestCase):
+    """`_extract_components` のネストパス対応テスト。"""
+
+    def test_nested_scan_dir_detects_component(self) -> None:
+        """scan_dirs=["src/modules"] でネストパス内のコンポーネントが取れる。"""
+        files = [
+            "src/modules/my-component/index.ts",
+            "src/modules/other/util.py",
+        ]
+        result = components._extract_components(files, ["src/modules"])
+        self.assertEqual(
+            sorted(result, key=lambda c: c["name"]),
+            [
+                {"path": "src/modules/my-component", "scan_dir": "src/modules", "name": "my-component"},
+                {"path": "src/modules/other", "scan_dir": "src/modules", "name": "other"},
+            ],
+        )
+
+    def test_deep_path_takes_priority_over_shallow(self) -> None:
+        """scan_dirs=["src", "src/modules"] で深いパスが優先される。
+
+        "src/modules/foo/bar.ts" は "src" ではなく "src/modules" に属する。
+        """
+        files = [
+            "src/modules/foo/bar.ts",
+            "src/other/main.py",
+        ]
+        result = components._extract_components(files, ["src", "src/modules"])
+        # src/modules/foo は src/modules に属する（"src" ではない）
+        foo_entry = next(c for c in result if c["name"] == "foo")
+        self.assertEqual(foo_entry["scan_dir"], "src/modules")
+        self.assertEqual(foo_entry["path"], "src/modules/foo")
+        # src/other は "src" に属する（"src/modules" にはマッチしない）
+        other_entry = next(c for c in result if c["name"] == "other")
+        self.assertEqual(other_entry["scan_dir"], "src")
+
+    def test_single_level_scan_dir_still_works(self) -> None:
+        """単一レベル（"src"）は後方互換を保つ回帰テスト。"""
+        files = [
+            "src/foo/main.py",
+            "src/bar/util.py",
+            "lib/baz/index.ts",
+        ]
+        result = components._extract_components(files, ["src", "lib"])
+        self.assertEqual(
+            sorted(result, key=lambda c: c["path"]),
+            [
+                {"path": "lib/baz", "scan_dir": "lib", "name": "baz"},
+                {"path": "src/bar", "scan_dir": "src", "name": "bar"},
+                {"path": "src/foo", "scan_dir": "src", "name": "foo"},
+            ],
+        )
+
+    def test_deeply_nested_scan_dir(self) -> None:
+        """a/b/c のような深さ3以上のネストパスも有効。"""
+        files = [
+            "packages/shared/utils/index.ts",
+            "packages/shared/helpers/format.ts",
+            "packages/other/main.ts",
+        ]
+        result = components._extract_components(
+            files, ["packages/shared", "packages"]
+        )
+        # packages/shared/utils → scan_dir=packages/shared
+        utils_entry = next(c for c in result if c["name"] == "utils")
+        self.assertEqual(utils_entry["scan_dir"], "packages/shared")
+        # packages/other → scan_dir=packages
+        other_entry = next(c for c in result if c["name"] == "other")
+        self.assertEqual(other_entry["scan_dir"], "packages")
+
+
+class TestExtractComponentsScanDirClaim(unittest.TestCase):
+    """ネストした scan_dir は浅い scan_dir のフォールスルーを防ぐ（claim 機構）。
+
+    バグ再現: scan_dirs=["src/hooks", "src"] かつ src/hooks/ 直下に
+    ファイル（サブディレクトリではない）しかない場合、
+    「hooks」という名前の component が "src" 配下に誤って作られていた。
+    """
+
+    def test_nested_scan_dir_claims_files_even_without_subdirs(self) -> None:
+        """src/hooks/ 直下のファイルは「src/hooks に claim 済み」として
+        扱い、浅い "src" にフォールスルーさせない。"""
+        files = [
+            "src/hooks/use-foo.ts",
+            "src/hooks/use-bar.ts",
+            "src/components/button/index.tsx",
+        ]
+        result = components._extract_components(files, ["src/hooks", "src"])
+        # "hooks" という component が src 配下に作られないこと。
+        # "src/components" は通常通り検出される。
+        self.assertEqual(
+            result,
+            [
+                {
+                    "path": "src/components",
+                    "scan_dir": "src",
+                    "name": "components",
+                },
+            ],
+        )
+
+    def test_nested_scan_dir_with_subdirectories_creates_components(self) -> None:
+        """src/hooks/ にサブディレクトリがあれば、それが component になる。"""
+        files = [
+            "src/hooks/use-auth/index.ts",
+            "src/hooks/use-auth/types.ts",
+            "src/hooks/use-form/index.ts",
+            "src/components/button/index.tsx",
+        ]
+        result = components._extract_components(files, ["src/hooks", "src"])
+        self.assertEqual(
+            sorted(result, key=lambda c: c["path"]),
+            [
+                {
+                    "path": "src/components",
+                    "scan_dir": "src",
+                    "name": "components",
+                },
+                {
+                    "path": "src/hooks/use-auth",
+                    "scan_dir": "src/hooks",
+                    "name": "use-auth",
+                },
+                {
+                    "path": "src/hooks/use-form",
+                    "scan_dir": "src/hooks",
+                    "name": "use-form",
+                },
+            ],
+        )
+
+    def test_nested_scan_dir_mixed_files_and_subdirectories(self) -> None:
+        """src/hooks/ 直下にファイルとサブディレクトリが混在する場合、
+        サブディレクトリのみ component になる（直下ファイルは無視）。"""
+        files = [
+            "src/hooks/use-foo.ts",            # 直下ファイル → 無視
+            "src/hooks/use-bar/index.ts",      # サブディレクトリ → component
+            "src/components/button/index.tsx",
+        ]
+        result = components._extract_components(files, ["src/hooks", "src"])
+        self.assertEqual(
+            sorted(result, key=lambda c: c["path"]),
+            [
+                {
+                    "path": "src/components",
+                    "scan_dir": "src",
+                    "name": "components",
+                },
+                {
+                    "path": "src/hooks/use-bar",
+                    "scan_dir": "src/hooks",
+                    "name": "use-bar",
+                },
+            ],
+        )
+
+
 class TestBuildComponentsWithGit(unittest.TestCase):
     """`build_components` の統合テスト（実 git ls-files 経由）。"""
 

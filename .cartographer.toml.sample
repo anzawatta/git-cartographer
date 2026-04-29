@@ -1,0 +1,20 @@
+# .cartographer.toml — git-cartographer 設定ファイル
+# リポジトリルートに .cartographer.toml として配置することで挙動をカスタマイズできます。
+# 設定ファイルがない場合は組込デフォルトが使われます。
+
+[components]
+# コンポーネントとして測量するディレクトリを指定します。
+# 各エントリの「直下サブディレクトリ」がコンポーネントとして認識されます。
+# ネストしたパス（例: "packages/shared"）も指定可能です。
+# 深いパスと浅いパスが両方含まれる場合、深いパスが優先されます。
+scan_dirs = [
+    "src",
+    "lib",
+    "packages",
+    "apps",
+    "services",
+    "functions",
+    # ネストパスの例（コメントアウトを外して使用）:
+    # "packages/shared",
+    # "src/modules",
+]

@@ -74,6 +74,12 @@ def load_config(repo_path: str, config_path: str | None = None) -> CartographerC
 
     解析失敗（TOML 構文エラー・型エラー）は stderr に warning を出して
     組込デフォルトにフォールバックする（fail-loud / continue）。
+
+    @see EARS-003#REQ-U004
+    @see EARS-003#REQ-E001
+    @see EARS-003#REQ-E002
+    @see EARS-003#REQ-E003
+    @see EARS-003#REQ-E004
     """
     # 1. 明示指定パス
     if config_path is not None:
