@@ -54,6 +54,12 @@ def _extract_components(
     深いパスと浅いパスが重複する場合（例: "src" と "src/modules"）は深いパスが優先される。
       - "src/modules/foo/bar.ts" → "src/modules" が "src" より優先される
 
+    Claim セマンティクス: ファイルがある scan_dir の prefix にマッチした時点で、
+    そのファイルは「claim 済み」となり、より浅い scan_dir にはフォールスルーしない。
+    例: scan_dirs=["src/hooks", "src"] で "src/hooks/use-foo.ts" は
+    "src/hooks" に claim される（サブディレクトリでないため component にはならないが、
+    "src" にフォールスルーして "hooks" component が誤生成されることもない）。
+
     Returns: 重複除去後、(scan_dir, name) でソートされた dict 一覧
     """
     # path 正規化: TOML の `src/` も `src` も等価扱い
@@ -71,16 +77,15 @@ def _extract_components(
         for scan_dir in sorted_scan_dirs:
             scan_dir_parts = scan_dir.split("/")
             depth = len(scan_dir_parts)
-            if len(parts) < depth + 2:
-                # scan_dir 分 + component 名 + ファイル の最低 parts 数が必要
+            if len(parts) < depth or parts[:depth] != scan_dir_parts:
+                # この scan_dir の配下ではない
                 continue
-            if parts[:depth] != scan_dir_parts:
-                continue
-            name = parts[depth]
-            if not name:
-                continue
-            seen.add((scan_dir, name))
-            break  # 深いパスが先にマッチしたら終了
+            # この scan_dir に claim される（コンポーネント化できなくても break）
+            if len(parts) >= depth + 2:
+                name = parts[depth]
+                if name:
+                    seen.add((scan_dir, name))
+            break  # 深いパスにマッチしたら浅いパスへフォールスルーしない
 
     components: list[dict[str, str]] = []
     for scan_dir, name in sorted(seen):

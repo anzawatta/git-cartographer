@@ -218,6 +218,92 @@ class TestExtractComponentsNestedPaths(unittest.TestCase):
         self.assertEqual(other_entry["scan_dir"], "packages")
 
 
+class TestExtractComponentsScanDirClaim(unittest.TestCase):
+    """ネストした scan_dir は浅い scan_dir のフォールスルーを防ぐ（claim 機構）。
+
+    バグ再現: scan_dirs=["src/hooks", "src"] かつ src/hooks/ 直下に
+    ファイル（サブディレクトリではない）しかない場合、
+    「hooks」という名前の component が "src" 配下に誤って作られていた。
+    """
+
+    def test_nested_scan_dir_claims_files_even_without_subdirs(self) -> None:
+        """src/hooks/ 直下のファイルは「src/hooks に claim 済み」として
+        扱い、浅い "src" にフォールスルーさせない。"""
+        files = [
+            "src/hooks/use-foo.ts",
+            "src/hooks/use-bar.ts",
+            "src/components/button/index.tsx",
+        ]
+        result = components._extract_components(files, ["src/hooks", "src"])
+        # "hooks" という component が src 配下に作られないこと。
+        # "src/components" は通常通り検出される。
+        self.assertEqual(
+            result,
+            [
+                {
+                    "path": "src/components",
+                    "scan_dir": "src",
+                    "name": "components",
+                },
+            ],
+        )
+
+    def test_nested_scan_dir_with_subdirectories_creates_components(self) -> None:
+        """src/hooks/ にサブディレクトリがあれば、それが component になる。"""
+        files = [
+            "src/hooks/use-auth/index.ts",
+            "src/hooks/use-auth/types.ts",
+            "src/hooks/use-form/index.ts",
+            "src/components/button/index.tsx",
+        ]
+        result = components._extract_components(files, ["src/hooks", "src"])
+        self.assertEqual(
+            sorted(result, key=lambda c: c["path"]),
+            [
+                {
+                    "path": "src/components",
+                    "scan_dir": "src",
+                    "name": "components",
+                },
+                {
+                    "path": "src/hooks/use-auth",
+                    "scan_dir": "src/hooks",
+                    "name": "use-auth",
+                },
+                {
+                    "path": "src/hooks/use-form",
+                    "scan_dir": "src/hooks",
+                    "name": "use-form",
+                },
+            ],
+        )
+
+    def test_nested_scan_dir_mixed_files_and_subdirectories(self) -> None:
+        """src/hooks/ 直下にファイルとサブディレクトリが混在する場合、
+        サブディレクトリのみ component になる（直下ファイルは無視）。"""
+        files = [
+            "src/hooks/use-foo.ts",            # 直下ファイル → 無視
+            "src/hooks/use-bar/index.ts",      # サブディレクトリ → component
+            "src/components/button/index.tsx",
+        ]
+        result = components._extract_components(files, ["src/hooks", "src"])
+        self.assertEqual(
+            sorted(result, key=lambda c: c["path"]),
+            [
+                {
+                    "path": "src/components",
+                    "scan_dir": "src",
+                    "name": "components",
+                },
+                {
+                    "path": "src/hooks/use-bar",
+                    "scan_dir": "src/hooks",
+                    "name": "use-bar",
+                },
+            ],
+        )
+
+
 class TestBuildComponentsWithGit(unittest.TestCase):
     """`build_components` の統合テスト（実 git ls-files 経由）。"""
 
