@@ -114,6 +114,33 @@ PostToolUse / PreToolUse フックを `.claude/settings.json` に登録するこ
 
 ---
 
+## `.cartographer.toml` の設定方法
+
+### サンプルファイルをコピーして使う
+
+リポジトリルートにサンプルをコピーし、必要に応じて編集する：
+
+```bash
+cp /path/to/git-cartographer/.cartographer.toml.sample /path/to/your/repo/.cartographer.toml
+```
+
+設定ファイルがない場合は組込デフォルトが使われるため、必須ではない。
+
+### ネストパスの指定
+
+`scan_dirs` にはネストしたパス（例: `"packages/shared"`）も指定可能で、各エントリの直下サブディレクトリがコンポーネントとして認識される。`"src"` と `"src/modules"` のように深いパスと浅いパスが両方含まれる場合は、深いパスが優先される。
+
+```toml
+[components]
+scan_dirs = [
+    "src",
+    "packages",
+    "packages/shared",   # src/modules/foo は src より packages/shared が優先される
+]
+```
+
+---
+
 ## `.cartographer_state` のリセット方法
 
 `.cartographer_state` は HEAD 未変更時のスキップ最適化に使われる。

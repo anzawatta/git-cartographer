@@ -49,25 +49,38 @@ def _extract_components(
       - "lib/foo-stack.ts"          → 直下ファイルなのでスキップ
       - "lambda/handler/index.ts"   → scan_dirs に "lambda" がなければスキップ
 
+    ネストパス対応: scan_dirs に "src/modules" のような深いパスを指定可能。
+      - "src/modules/my-component/index.ts" → ("src/modules", "my-component", "src/modules/my-component")
+    深いパスと浅いパスが重複する場合（例: "src" と "src/modules"）は深いパスが優先される。
+      - "src/modules/foo/bar.ts" → "src/modules" が "src" より優先される
+
     Returns: 重複除去後、(scan_dir, name) でソートされた dict 一覧
     """
     # path 正規化: TOML の `src/` も `src` も等価扱い
     normalized_scan_dirs = [d.strip("/").rstrip("/") for d in scan_dirs if d.strip("/")]
 
+    # depth 降順にソートして深いパスを優先
+    sorted_scan_dirs = sorted(
+        normalized_scan_dirs, key=lambda d: len(d.split("/")), reverse=True
+    )
+
     seen: set[tuple[str, str]] = set()
     for rel_path in tracked_files:
         # POSIX 区切りで分解（git ls-files は常に "/" を返す）
         parts = rel_path.split("/")
-        if len(parts) < 3:
-            # scan_dir 直下のファイル（例: src/foo.py）は components ではない
-            continue
-        scan_dir = parts[0]
-        if scan_dir not in normalized_scan_dirs:
-            continue
-        name = parts[1]
-        if not name:
-            continue
-        seen.add((scan_dir, name))
+        for scan_dir in sorted_scan_dirs:
+            scan_dir_parts = scan_dir.split("/")
+            depth = len(scan_dir_parts)
+            if len(parts) < depth + 2:
+                # scan_dir 分 + component 名 + ファイル の最低 parts 数が必要
+                continue
+            if parts[:depth] != scan_dir_parts:
+                continue
+            name = parts[depth]
+            if not name:
+                continue
+            seen.add((scan_dir, name))
+            break  # 深いパスが先にマッチしたら終了
 
     components: list[dict[str, str]] = []
     for scan_dir, name in sorted(seen):
