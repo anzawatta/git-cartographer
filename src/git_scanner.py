@@ -189,7 +189,8 @@ def commits_since_last_change_bulk(
     args = ["log", "--name-only", "--format=COMMIT:%H", "--diff-filter=AM"]
     if scan_limit_commits is not None:
         args.append(f"-{scan_limit_commits}")
-    args.append("HEAD")
+    # Why: use head_hash explicitly for reproducibility (snapshot-safe, not runtime HEAD resolution)
+    args.append(head_hash)
     args.append("--")
     args.extend(files)
 

@@ -24,20 +24,7 @@
 1. REQ-S001: HEAD が `.cartographer_state` に記録されたハッシュと一致する場合、System は実行をスキップしなければならない
 2. REQ-S002: HEAD が `.cartographer_state` と異なる、またはファイルが存在しない場合、System は最新 `window` コミットをフルスキャンし、完了後に HEAD ハッシュを `.cartographer_state` に記録しなければならない
 3. REQ-S003: stable 層は、churn 頻度が低い（過去 N コミットで変更なし）ファイルのみを含まなければならない
-
-## 状態駆動条件
-
-## REQ-S004 — stability_score calculation
-
-**ID**: REQ-S004  
-**Type**: System response  
-**Priority**: SHALL  
-
-WHEN the cartographer generates stable layer output  
-THE SYSTEM SHALL compute `stability_score` for each `load_bearing` entry using the F2 decay formula:  
-`stability_score = 1.0 - 0.5^(commits_since_last_change / halflife_stable)`  
-WHERE `halflife_stable` defaults to 200 commits.  
-IF the distance cannot be computed (git failure, file not found in scan range), `stability_score` SHALL be `null`.
+4. REQ-S004: stable 層の各 `load_bearing` エントリは `stability_score` フィールドを含み、F2 減衰式 `1.0 - 0.5^(commits_since_last_change / halflife_stable)` で算出されなければならない。`halflife_stable` のデフォルトは 200 コミット。算出失敗時（git 障害またはスキャン範囲外）は `null` とする
 
 ## Cold Start 条件
 

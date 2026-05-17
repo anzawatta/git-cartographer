@@ -203,7 +203,7 @@ def run(
         commits_since_last_change_map = git_scanner.commits_since_last_change_bulk(
             repo_path, stable_files, head_hash
         )
-    except Exception as e:
+    except RuntimeError as e:
         print(f"[cartographer] stability score computation failed: {e}", file=sys.stderr)
         commits_since_last_change_map = {f: None for f in stable_files}
 
