@@ -7,6 +7,7 @@ git コマンドのみを使用し、外部ライブラリに依存しない。
 from __future__ import annotations
 
 import subprocess
+import sys
 from collections import defaultdict
 from itertools import combinations
 
@@ -161,3 +162,57 @@ def cochange_pairs(
         pair: {"count": count, "last_hash": pair_last_hash.get(pair, "")}
         for pair, count in pair_counts.items()
     }
+
+
+# @see EARS-001#REQ-S004
+def commits_since_last_change_bulk(
+    repo_path: str,
+    files: list[str],
+    head_hash: str,
+    scan_limit_commits: int | None = None,
+) -> dict[str, int | None]:
+    """
+    各ファイルに対し HEAD から最新変更コミットまでのコミット距離を返す。
+
+    単一の git log --name-only --format=COMMIT:%H --diff-filter=AM 走査で
+    newest-first にコミットカウンタを進めながら、ファイル初出現時に距離を確定する。
+
+    scan_limit_commits=None: 全履歴走査（stable files のデフォルト）
+    scan_limit_commits=int: -N コミット制限。範囲内で見つからないファイルは None フォールバック。
+
+    # Why: single git log pass instead of N subprocesses
+    # cochange_pairs() の単一パス走査パターンを踏襲し、O(N) サブプロセス問題を根本解消する。
+    """
+    if not files:
+        return {}
+
+    args = ["log", "--name-only", "--format=COMMIT:%H", "--diff-filter=AM"]
+    if scan_limit_commits is not None:
+        args.append(f"-{scan_limit_commits}")
+    args.append("HEAD")
+    args.append("--")
+    args.extend(files)
+
+    try:
+        output = _run_git(args, repo_path)
+    except RuntimeError as e:
+        print(f"[cartographer] commits_since_last_change_bulk failed: {e}", file=sys.stderr)
+        return {f: None for f in files}
+
+    commit_counter = 0
+    current_hash = ""
+    result: dict[str, int | None] = {f: None for f in files}
+    remaining = set(files)
+
+    for line in output.splitlines():
+        if not remaining:
+            break
+        if line.startswith("COMMIT:"):
+            if current_hash:  # not the very first
+                commit_counter += 1
+            current_hash = line[len("COMMIT:"):]
+        elif line.strip() and line in remaining:
+            result[line] = commit_counter
+            remaining.discard(line)
+
+    return result
