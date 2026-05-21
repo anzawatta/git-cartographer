@@ -1,3 +1,8 @@
+---
+addresses:
+  - EARS-001
+  - EARS-001#REQ-S004
+---
 # ADR-001: JSON Canonical Output
 
 **Status:** Accepted

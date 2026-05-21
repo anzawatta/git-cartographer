@@ -1,3 +1,9 @@
+---
+provides:
+  - REQ-S001
+  - REQ-S002
+  - REQ-U001
+---
 # EARS-001: Map Generation
 
 **Status:** Draft

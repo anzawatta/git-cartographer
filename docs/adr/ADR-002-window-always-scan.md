@@ -1,3 +1,8 @@
+---
+addresses:
+  - EARS-001#REQ-S001
+  - EARS-001#REQ-S002
+---
 # ADR-002: Window-Always Scan（インクリメンタルモード廃止）
 
 **Status:** Accepted

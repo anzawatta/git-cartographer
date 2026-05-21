@@ -1,3 +1,9 @@
+---
+addresses:
+  - EARS-003
+  - EARS-003#REQ-U005
+  - EARS-003#REQ-U006
+---
 # ADR-003: Components Measurement Axis（第4軸 components.json）
 
 **Status:** Accepted
