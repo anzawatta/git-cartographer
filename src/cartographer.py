@@ -194,6 +194,19 @@ def run(
 
     # @see EARS-001#REQ-S003
     stable_files = layers.build_stable(churn, threshold=0)
+
+    # @see EARS-001#REQ-S004
+    # Why: single bulk call — avoids O(N) git subprocesses for stable file distance
+    print("[cartographer] Computing stability scores for stable files...")
+    halflife_stable = 200
+    try:
+        commits_since_last_change_map = git_scanner.commits_since_last_change_bulk(
+            repo_path, stable_files, head_hash
+        )
+    except RuntimeError as e:
+        print(f"[cartographer] stability score computation failed: {e}", file=sys.stderr)
+        commits_since_last_change_map = {f: None for f in stable_files}
+
     structure_data = layers.build_structure(churn, cochange, import_graph, include_stdlib=include_stdlib)
     hotspots_data = layers.build_hotspots(churn, top_n=20)
 
@@ -233,7 +246,11 @@ def run(
     # @see EARS-001#REQ-U001
     _write_file(output_dir, "co-change.jsonl", layers.render_cochange_jsonl(structure_data, scan_info, cochange_weight_map))
     _write_file(output_dir, "hotspot.json", layers.render_hotspot_json(hotspots_data, scan_info))
-    _write_file(output_dir, "stable.json", layers.render_stable_json(stable_files, scan_info))
+    _write_file(output_dir, "stable.json", layers.render_stable_json(
+        stable_files, scan_info,
+        commits_since_last_change_map=commits_since_last_change_map,
+        halflife_stable=halflife_stable,
+    ))
     # @see ADR-003
     _write_file(
         output_dir,

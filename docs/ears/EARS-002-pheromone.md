@@ -1,3 +1,8 @@
+---
+provides:
+  - REQ-E001
+  - REQ-E002
+---
 # EARS-002: Traverse log Layer
 
 **Status:** Draft

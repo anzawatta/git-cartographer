@@ -1,3 +1,10 @@
+---
+provides:
+  - REQ-U001
+requires:
+  - EARS-001#REQ-S001
+  - EARS-001#REQ-U001
+---
 # EARS-003: Components Measurement Axis
 
 **Status:** Draft

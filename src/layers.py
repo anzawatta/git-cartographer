@@ -328,7 +328,12 @@ def render_hotspot_json(hotspots_data: list[tuple[str, int]], scan_info: dict) -
 
 # @see EARS-001#REQ-U001
 # @see EARS-001#REQ-C003
-def render_stable_json(files: list[str], scan_info: dict) -> str:
+def render_stable_json(
+    files: list[str],
+    scan_info: dict,
+    commits_since_last_change_map: dict[str, int | None] | None = None,
+    halflife_stable: int = 200,
+) -> str:
     """
     stable.json の JSON 文字列を返す。
 
@@ -337,7 +342,7 @@ def render_stable_json(files: list[str], scan_info: dict) -> str:
       "load_bearing": [
         {
           "path": str,
-          "stability_score": null,
+          "stability_score": float | null,  # F2 decay: 1.0 - 0.5^(d / halflife_stable); null on fallback
           "incoming_dependencies": null,
           "last_significant_change": null,
           "warning": null
@@ -351,9 +356,17 @@ def render_stable_json(files: list[str], scan_info: dict) -> str:
 
     load_bearing = []
     for path in files:
+        # @see EARS-001#REQ-S004
+        # Why: F2 decay model — new changes score near 0, old/stable score near 1.0
+        # halflife_stable=200 means score≈0.5 at 200 commits since last change.
+        distance = (commits_since_last_change_map or {}).get(path)
+        if distance is not None:
+            stability_score = 1.0 - (0.5 ** (distance / halflife_stable))
+        else:
+            stability_score = None
         load_bearing.append({
             "path": path,
-            "stability_score": None,
+            "stability_score": stability_score,
             "incoming_dependencies": None,
             "last_significant_change": None,
             "warning": None,
