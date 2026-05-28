@@ -299,7 +299,10 @@ def _get_node_name(node, source: bytes) -> str | None:
 
 def _py_extract_symbols(parent_node, source: bytes, class_context: str | None = None) -> list[dict]:
     """
-    Recursively extract symbols from a module or class body node.
+    Extract symbols from a module or class body node.
+
+    Recurses into class bodies to collect methods (dotted ClassName.method notation).
+    Does NOT recurse into function bodies — nested functions are out of MVP scope.
 
     class_context: if set, method names are prefixed as "ClassName.method".
     """
