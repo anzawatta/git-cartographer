@@ -22,6 +22,9 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["src*"]
 
+[tool.uv]
+no-build = false
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
