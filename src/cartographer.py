@@ -203,6 +203,7 @@ def run(
     # スキップ判定: HEAD が前回と同じなら何もしない
     # @see EARS-001#REQ-S001
     # @see EARS-003#REQ-S001
+    # @see EARS-004#REQ-S001
     last_hash = state.get_last_hash(repo_path)
     if last_hash == head_hash:
         print("[cartographer] HEAD unchanged. Skipping.")

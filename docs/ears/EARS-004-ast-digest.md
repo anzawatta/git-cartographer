@@ -41,6 +41,7 @@ requires:
 - `ast-digest.json` が存在しない場合（例: コンシューマーが cartographer より先に実行された場合）、コンシューマーは graceful fallback すべきである: `symbol` を `null` として扱い、一度だけ stderr に `"warning: ast-digest.json not found at {path}; symbol resolution disabled. → Fix: run cartographer first"` を出力する。(GZ-9)
 - stderr の頻度: 失敗ファイルごとに1行/ラン。重複排除なし。変更頻度の高いリポジトリでは多数の warning が出力される可能性がある — fail-loud 動作を維持するためこれは受け入れられている。(GZ-10, GZ-12)
 - `parse_status: "skipped_language"` は意図的であり、stderr は出力しない。stderr を出力するのは `"failed"` と `"skipped_size"` のみ。(GZ-12)
+- `extract_symbol_digest()` はモジュールレベル変数代入（例: `supported_extensions = {...}`）をシンボルとして記録する。一方、`interface_area()` は `_`-prefix の名前を公開 API から除外する。この非対称性は意図的: `extract_symbol_digest()` は PRINCIPLE §2「Surveyor, Not Interpreter」に従い解釈を行わず全シンボルを記録する（`interface_area()` は公開 API 面積の代理指標という別目的のため `_`-prefix 除外が有効だった）。(GZ-5)
 
 ## [INV] アトミック書き込みの不変条件
 
