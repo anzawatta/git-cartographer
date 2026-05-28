@@ -8,6 +8,7 @@ TreeSitter AST 解析（依存関係・インターフェース面積）。
 from __future__ import annotations
 
 import os
+import sys
 from functools import lru_cache
 from typing import Any
 
@@ -273,3 +274,182 @@ def interface_area(file_path: str) -> int:
         pass
 
     return 0
+
+
+# --- extract_symbol_digest helpers ---
+
+DEFAULT_MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
+
+
+def _find_child_of_type(node, node_type: str):
+    """Return the first direct child of node whose type matches node_type, or None."""
+    for child in node.children:
+        if child.type == node_type:
+            return child
+    return None
+
+
+def _get_node_name(node, source: bytes) -> str | None:
+    """Extract the identifier text from a function_definition or class_definition node."""
+    id_node = _find_child_of_type(node, "identifier")
+    if id_node is None:
+        return None
+    return _extract_text(id_node, source)
+
+
+def _py_extract_symbols(parent_node, source: bytes, class_context: str | None = None) -> list[dict]:
+    """
+    Extract symbols from a module or class body node.
+
+    Recurses into class bodies to collect methods (dotted ClassName.method notation).
+    Does NOT recurse into function bodies — nested functions are out of MVP scope.
+
+    class_context: if set, method names are prefixed as "ClassName.method".
+    """
+    results = []
+    for child in parent_node.children:
+        node_type = child.type
+
+        # Handle decorated definitions: use outer node's line range, unwrap inner def/class
+        if node_type == "decorated_definition":
+            inner = _find_child_of_type(child, "function_definition") or \
+                    _find_child_of_type(child, "async_function_definition") or \
+                    _find_child_of_type(child, "class_definition")
+            if inner is None:
+                continue
+            name = _get_node_name(inner, source)
+            if name is None:
+                continue
+            # Line range comes from the outer decorated_definition (includes decorators)
+            line_start = child.start_point[0] + 1
+            line_end = child.end_point[0] + 1
+            if inner.type == "class_definition":
+                results.append({"name": name, "kind": "class",
+                                 "line_start": line_start, "line_end": line_end})
+                # Recurse into class body
+                body = _find_child_of_type(inner, "block")
+                if body is not None:
+                    results.extend(_py_extract_symbols(body, source, class_context=name))
+            else:
+                kind = "method" if class_context is not None else "function"
+                full_name = f"{class_context}.{name}" if class_context is not None else name
+                results.append({"name": full_name, "kind": kind,
+                                 "line_start": line_start, "line_end": line_end})
+            continue
+
+        # Regular function (sync or async)
+        if node_type in ("function_definition", "async_function_definition"):
+            name = _get_node_name(child, source)
+            if name is None:
+                continue
+            kind = "method" if class_context is not None else "function"
+            full_name = f"{class_context}.{name}" if class_context is not None else name
+            line_start = child.start_point[0] + 1
+            line_end = child.end_point[0] + 1
+            results.append({"name": full_name, "kind": kind,
+                             "line_start": line_start, "line_end": line_end})
+            continue
+
+        # Class definition
+        if node_type == "class_definition":
+            name = _get_node_name(child, source)
+            if name is None:
+                continue
+            line_start = child.start_point[0] + 1
+            line_end = child.end_point[0] + 1
+            results.append({"name": name, "kind": "class",
+                             "line_start": line_start, "line_end": line_end})
+            # Recurse into class body to extract methods
+            body = _find_child_of_type(child, "block")
+            if body is not None:
+                results.extend(_py_extract_symbols(body, source, class_context=name))
+            continue
+
+        # Module-level variable: expression_statement > assignment where LHS is a single identifier
+        # Only collect at module/top level (not inside a class body)
+        if node_type == "expression_statement" and class_context is None:
+            assign = _find_child_of_type(child, "assignment")
+            if assign is not None:
+                lhs = assign.children[0] if assign.children else None
+                if lhs is not None and lhs.type == "identifier":
+                    name = _extract_text(lhs, source)
+                    line_start = child.start_point[0] + 1
+                    line_end = child.end_point[0] + 1
+                    results.append({"name": name, "kind": "variable",
+                                    "line_start": line_start, "line_end": line_end})
+            continue
+
+    return results
+
+
+# Why: GZ-8
+# parse_status uses sub-classifications (skipped_language / skipped_size / failed)
+# rather than a single skipped value so that consumers can distinguish:
+#   - skipped_language: expected behaviour (language not supported, no action needed)
+#   - skipped_size:     recoverable config issue (raise max_file_size or split the file)
+#   - failed:           potential bug or malformed input (worth investigating)
+# A single "skipped" would collapse all three into an opaque result.
+
+# Why: GZ-5
+# extract_symbol_digest() does NOT filter out "_"-prefixed names, unlike interface_area()
+# which excludes them when counting public symbols for Python.
+# Reason: PRINCIPLE §2 "Surveyor, Not Interpreter" — this function records all symbols
+# as structural fact without interpretation. interface_area() was designed for a different
+# purpose (estimating public API surface); that filtering reflects an intentional semantic
+# choice inappropriate here.
+def extract_symbol_digest(path: str, max_file_size: int = DEFAULT_MAX_FILE_SIZE) -> dict:
+    """
+    Return a per-file symbol digest for the given path.
+
+    Output schema:
+        {
+            "parse_status": "ok" | "skipped_language" | "skipped_size" | "failed",
+            "symbols": [
+                {"name": str, "kind": "function"|"class"|"method"|"variable",
+                 "line_start": int, "line_end": int},
+                ...
+            ]
+        }
+
+    Only Python is supported for MVP. All other extensions return parse_status="skipped_language".
+    """
+    ext = os.path.splitext(path)[1].lower()
+
+    # Non-Python extensions: graceful skip, no stderr
+    if ext != ".py":
+        return {"parse_status": "skipped_language", "symbols": []}
+
+    # Size check before reading full content
+    try:
+        file_size = os.path.getsize(path)
+    except OSError:
+        # File not found or inaccessible
+        print(f"warning: AST parse failed: {path} (file not found or inaccessible)",
+              file=sys.stderr)
+        return {"parse_status": "failed", "symbols": []}
+
+    if file_size > max_file_size:
+        print(
+            f"warning: AST parse skipped (size): {path} ({file_size} bytes > {max_file_size})",
+            file=sys.stderr,
+        )
+        return {"parse_status": "skipped_size", "symbols": []}
+
+    source = _read_file_bytes(path)
+    if source is None:
+        print(f"warning: AST parse failed: {path} (could not read file)", file=sys.stderr)
+        return {"parse_status": "failed", "symbols": []}
+
+    parser, _lang = _get_parser(ext)
+    if parser is None:
+        print(f"warning: AST parse failed: {path} (parser unavailable)", file=sys.stderr)
+        return {"parse_status": "failed", "symbols": []}
+
+    try:
+        tree = parser.parse(source)
+        root = tree.root_node
+        symbols = _py_extract_symbols(root, source, class_context=None)
+        return {"parse_status": "ok", "symbols": symbols}
+    except Exception as exc:
+        print(f"warning: AST parse failed: {path} ({exc})", file=sys.stderr)
+        return {"parse_status": "failed", "symbols": []}

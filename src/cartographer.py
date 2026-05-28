@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime, timezone
 
 from src import ast_scanner, components as components_axis, config as config_module, git_scanner, layers, traverse_log, state
@@ -31,6 +32,27 @@ def _write_file(output_dir: str, filename: str, content: str) -> None:
 
 # Alias for backward compatibility and clarity
 _write_markdown = _write_file
+
+
+# Why: atomic-write for ast-digest.json
+# Unlike other canonical outputs (_write_file uses simple open()), ast-digest.json
+# uses tmpfile + os.replace to ensure no partial JSON reaches consumers.
+# @see EARS-004 [INV]
+def _write_json_atomic(output_dir: str, filename: str, content: str) -> None:
+    """Write content atomically via tmpfile + os.replace (EARS-004 [INV])."""
+    path = os.path.join(output_dir, filename)
+    fd, tmp_path = tempfile.mkstemp(dir=output_dir, prefix=f".{filename}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+    print(f"  Written: {path}")
 
 
 def _build_import_graph(
@@ -63,6 +85,46 @@ def _all_tracked_files(repo_path: str) -> list[str]:
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
+# Why: scope AST scan to scan_dirs only (not all tracked files)
+# cartographer follows PRINCIPLE §1 "Measure, Don't Infer" — scanning every
+# tracked file would include vendored code, generated assets, test fixtures, etc.
+# scan_dirs is the user-declared boundary of what constitutes "the codebase".
+# @see EARS-004#REQ-U001
+_AST_EXTENSIONS = {".py", ".js", ".ts", ".go"}
+
+
+def _collect_scan_dir_files(repo_path: str, scan_dirs: list[str]) -> list[str]:
+    """Return git-tracked files under scan_dirs whose extension is in _AST_EXTENSIONS."""
+    all_files = _all_tracked_files(repo_path)
+    result = []
+    for f in all_files:
+        if os.path.splitext(f)[1].lower() not in _AST_EXTENSIONS:
+            continue
+        for d in scan_dirs:
+            prefix = d.rstrip("/") + "/"
+            if f.startswith(prefix):
+                result.append(f)
+                break
+    return result
+
+
+def _build_ast_digest(repo_path: str, scan_dirs: list[str]) -> list[dict]:
+    """Build per-file symbol digest entries for all scan_dir files."""
+    file_list = _collect_scan_dir_files(repo_path, scan_dirs)
+    files = []
+    for rel_path in file_list:
+        abs_path = os.path.join(repo_path, rel_path)
+        # @see EARS-004#REQ-U002
+        # @see EARS-004#REQ-U003
+        digest = ast_scanner.extract_symbol_digest(abs_path)
+        files.append({
+            "path": rel_path,
+            "parse_status": digest["parse_status"],
+            "symbols": digest["symbols"],
+        })
+    return files
+
+
 # @see EARS-001#REQ-S001
 # @see EARS-001#REQ-S002
 def run(
@@ -84,6 +146,7 @@ def run(
     5. traverse_log.decay_all で踏破録更新
     6. output/ に JSON 書き出し（常時）、Markdown 書き出し（markdown=True 時のみ）
     7. state.set_last_hash() 更新
+    7.5. ast_scanner で Phase 1.5 AST digest 生成（scan_dirs 配下全ファイル）
     """
     repo_path = os.path.abspath(repo_path)
     if os.path.isabs(output_dir):
@@ -127,6 +190,11 @@ def run(
             },
             ensure_ascii=False, indent=2,
         ))
+        # @see EARS-004#REQ-C001
+        _write_json_atomic(output_dir, "ast-digest.json", json.dumps(
+            {"status": "no_history", "generated_at": generated_at, "files": []},
+            ensure_ascii=False, indent=2,
+        ))
         print("[cartographer] Done (cold start).")
         return
 
@@ -135,6 +203,7 @@ def run(
     # スキップ判定: HEAD が前回と同じなら何もしない
     # @see EARS-001#REQ-S001
     # @see EARS-003#REQ-S001
+    # @see EARS-004#REQ-S001
     last_hash = state.get_last_hash(repo_path)
     if last_hash == head_hash:
         print("[cartographer] HEAD unchanged. Skipping.")
@@ -239,6 +308,11 @@ def run(
             "last_cochange_hash": last_hash if last_hash else None,
         }
 
+    # Phase 1.5: AST digest（scan_dirs 全ファイルのシンボル抽出）
+    # @see EARS-004#REQ-U001
+    print("[cartographer] Building AST digest...")
+    ast_digest_files = _build_ast_digest(repo_path, list(cfg.scan_dirs))
+
     # 出力書き出し
     print("[cartographer] Writing output...")
 
@@ -256,6 +330,17 @@ def run(
         output_dir,
         "components.json",
         components_axis.render_components_json(components_data, scan_info, cfg.scan_dirs),
+    )
+    # @see EARS-004#REQ-U001
+    # @see EARS-004#REQ-U004
+    _write_json_atomic(
+        output_dir,
+        "ast-digest.json",
+        json.dumps(
+            {"generated_at": generated_at, "head_hash": head_hash, "files": ast_digest_files},
+            ensure_ascii=False,
+            indent=2,
+        ),
     )
 
     # Markdown 出力（--markdown フラグ指定時のみ）
