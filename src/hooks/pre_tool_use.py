@@ -1,8 +1,8 @@
 """
 PreToolUse Hook — 踏破録スコア上位ファイルおよび安定層警告をコンテキストとして注入する。
 
-stdin から JSON を受け取り、stdout に {"decision": "allow", "reason": "<context>"} を返す。
-エラー時は {"decision": "allow", "reason": ""} を返す。
+stdin から JSON を受け取り、stdout に {"decision": "allow", "additionalContext": "<context>"} を返す。
+エラー時は {"decision": "allow", "additionalContext": ""} を返す。
 """
 
 from __future__ import annotations
@@ -209,7 +209,7 @@ def main() -> None:
 
         repo_root = _find_repo_root(os.getcwd())
         if repo_root is None:
-            print(json.dumps({"decision": "allow", "reason": ""}))
+            print(json.dumps({"decision": "allow", "additionalContext": ""}))
             return
 
         # @see EARS-002#REQ-E002
@@ -234,8 +234,10 @@ def main() -> None:
         if traverse_context:
             parts.append(traverse_context)
 
-        reason = "\n\n".join(parts)
-        print(json.dumps({"decision": "allow", "reason": reason}))
+        context = "\n\n".join(parts)
+        # Why: additionalContext injects text into Claude's context window (reason is user-facing only)
+        # @see https://docs.anthropic.com/en/docs/claude-code/hooks
+        print(json.dumps({"decision": "allow", "additionalContext": context}))
         return
 
     except Exception:
@@ -243,8 +245,9 @@ def main() -> None:
 
     # @see EARS-002#REQ-S001
     # エラー時は allow で返す（Claude Code の処理を止めない）
-    print(json.dumps({"decision": "allow", "reason": ""}))
+    print(json.dumps({"decision": "allow", "additionalContext": ""}))
 
 
 if __name__ == "__main__":
     main()
+# DEBUG REMOVED
