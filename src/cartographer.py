@@ -371,7 +371,8 @@ def run(
 
     # ステートファイル更新
     # @see EARS-001#REQ-S001
-    state.set_last_hash(head_hash, repo_path)
+    # @see EARS-001#REQ-S005
+    state.set_last_hash(head_hash, repo_path, output_dir=output_dir)
     print(f"[cartographer] State updated: {head_hash[:12]}")
     print("[cartographer] Done.")
 

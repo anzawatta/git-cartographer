@@ -1,7 +1,7 @@
 """
 .cartographer_state の読み書き。
 
-フォーマット: "<commit_hash> <iso_timestamp>"
+フォーマット: "<commit_hash> <iso_timestamp> [output_dir_abs]"
 """
 
 from __future__ import annotations
@@ -38,14 +38,19 @@ def get_last_hash(repo_path: str) -> str | None:
 
 # @see EARS-001#REQ-S001
 # @see EARS-001#REQ-S002
-def set_last_hash(hash: str, repo_path: str) -> None:
+# @see EARS-001#REQ-S005
+def set_last_hash(hash: str, repo_path: str, output_dir: str | None = None) -> None:
     """
-    .cartographer_state にコミットハッシュと現在時刻を書き込む。
+    .cartographer_state にコミットハッシュ・現在時刻・出力ディレクトリを書き込む。
+    output_dir が指定された場合は第3フィールドとして記録する。
     """
     path = _state_path(repo_path)
     timestamp = datetime.now(timezone.utc).isoformat()
     try:
         with open(path, "w", encoding="utf-8") as f:
-            f.write(f"{hash} {timestamp}\n")
+            if output_dir is not None:
+                f.write(f"{hash} {timestamp} {output_dir}\n")
+            else:
+                f.write(f"{hash} {timestamp}\n")
     except OSError as e:
         raise RuntimeError(f"Failed to write state file: {path}") from e

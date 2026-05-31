@@ -2,14 +2,21 @@
 provides:
   - REQ-S001
   - REQ-S002
+  - REQ-S003
+  - REQ-S004
+  - REQ-S005
   - REQ-U001
+  - REQ-U002
+  - REQ-U003
+  - REQ-U004
+  - REQ-U005
 ---
 # EARS-001: Map Generation
 
 **Status:** Draft
 **Date:** 2026-04-12
-**Updated:** 2026-04-26
-**Related ADR:** ADR-001 ADR-002
+**Updated:** 2026-05-31
+**Related ADR:** ADR-001 ADR-002 ADR-004
 
 ## 不変条件
 
@@ -17,6 +24,7 @@ provides:
 2. REQ-U002: System は、地図を stable / structure / hotspots の3層に分離して管理しなければならない
 3. REQ-U003: System は、AST 解析に TreeSitter のみを使用しなければならない
 4. REQ-U004: System は、コードベース解析に git コマンドと TreeSitter のみを使用しなければならない（embedding・専用DB等の重量依存を持ち込まない）
+5. REQ-U005: System は、`co-change.jsonl` に window 内で検出した全 co-change ペアを出力しなければならない（件数上限を設けてはならない）
 
 ## 敵対条件
 
@@ -31,6 +39,7 @@ provides:
 2. REQ-S002: HEAD が `.cartographer_state` と異なる、またはファイルが存在しない場合、System は最新 `window` コミットをフルスキャンし、完了後に HEAD ハッシュを `.cartographer_state` に記録しなければならない
 3. REQ-S003: stable 層は、churn 頻度が低い（過去 N コミットで変更なし）ファイルのみを含まなければならない
 4. REQ-S004: stable 層の各 `load_bearing` エントリは `stability_score` フィールドを含み、F2 減衰式 `1.0 - 0.5^(commits_since_last_change / halflife_stable)` で算出されなければならない。`halflife_stable` のデフォルトは 200 コミット。算出失敗時（git 障害またはスキャン範囲外）は `null` とする
+5. REQ-S005: フルスキャン完了後、System は `output/` ディレクトリの絶対パスを `.cartographer_state` の第3フィールドとして記録しなければならない。フォーマット: `<hash> <iso_timestamp> <output_dir_abs>`。パスにスペースを含む場合の安全性確保のため、読み取り側は `maxsplit=2` で分割しなければならない
 
 ## Cold Start 条件
 
