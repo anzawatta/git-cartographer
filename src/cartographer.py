@@ -105,6 +105,18 @@ def _collect_scan_dir_files(repo_path: str, scan_dirs: list[str]) -> list[str]:
             if f.startswith(prefix):
                 result.append(f)
                 break
+    # Why: silent empty result is the hardest failure mode to diagnose.
+    # If scan_dirs is non-empty but nothing matched, the most likely cause is a
+    # layout mismatch (e.g. Django's source lives under "django/", not "src/").
+    # Warn loudly so users can add .cartographer.toml to fix the boundary.
+    if not result:
+        print(
+            f"[WARNING] AST scan: no {'/'.join(sorted(_AST_EXTENSIONS))} files found "
+            f"under scan_dirs {scan_dirs!r} in {repo_path}. "
+            f"Add .cartographer.toml with [components] scan_dirs = [\"<your-source-dir>\"] "
+            f"to declare the correct source boundary.",
+            file=sys.stderr,
+        )
     return result
 
 
