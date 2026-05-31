@@ -131,6 +131,88 @@ def _compute_cochange_degree(cochange_jsonl_path: str, rel_path: str) -> int:
         return 0
 
 
+# @see EARS-002#REQ-E004
+def _build_ast_context(file_path: str) -> str | None:
+    """
+    file_path に対応する AST symbol digest を Markdown テーブルとして返す。
+    エントリが存在しない・parse_status が ok でない・symbols が空の場合は None を返す。
+    """
+    if not _validate_file_path(file_path):
+        return None
+
+    state_result = _find_cartographer_state(os.path.dirname(file_path))
+    if state_result is None:
+        return None
+
+    repo_root, output_dir = state_result
+
+    # @see EARS-004
+    # @see EARS-002#REQ-W005
+    ast_digest_path = os.path.join(output_dir, "ast-digest.json")
+    if not os.path.isfile(ast_digest_path):
+        print(
+            f"warning: ast-digest.json not found at {ast_digest_path};"
+            " symbol resolution disabled."
+            " → Fix: run cartographer first",
+            file=sys.stderr,
+        )
+        return None
+
+    try:
+        with open(ast_digest_path, "r", encoding="utf-8") as f:
+            digest_data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    files = digest_data.get("files", [])
+    if not files:
+        return None
+
+    try:
+        rel_path = os.path.relpath(file_path, repo_root)
+    except ValueError:
+        return None
+
+    # @see EARS-002#REQ-E004 — ファイル判定
+    matched_entry = None
+    for entry in files:
+        if entry.get("path") == rel_path:
+            matched_entry = entry
+            break
+
+    if matched_entry is None:
+        return None
+
+    # @see EARS-002#REQ-W006 — parse_status が ok でない場合、または symbols が空の場合はスキップ
+    if matched_entry.get("parse_status") != "ok":
+        return None
+
+    symbols = matched_entry.get("symbols", [])
+    if not symbols:
+        return None
+
+    # @see EARS-002#REQ-E004 — Markdown テーブル生成
+    lines = [
+        f"## Symbol Digest: {rel_path}",
+        "",
+        "| Name | Kind | Lines |",
+        "|------|------|-------|",
+    ]
+    for sym in symbols:
+        name = sym.get("name", "")
+        kind = sym.get("kind", "")
+        line_start = sym.get("line_start", "?")
+        line_end = sym.get("line_end", "?")
+        # Why: em-dash (–) matches the spec format; avoids confusion with hyphen ranges.
+        lines.append(f"| `{name}` | {kind} | {line_start}–{line_end} |")
+
+    lines += [
+        "",
+        "_このシンボルリストは git-cartographer の ast-digest.json から自動生成されています。_",
+    ]
+    return "\n".join(lines)
+
+
 # @see EARS-002#REQ-E003
 def _build_stable_warning(file_path: str) -> str | None:
     """
@@ -219,18 +301,23 @@ def main() -> None:
         traverse_context = _build_context(top)
 
         # @see EARS-002#REQ-E003 — stable layer warning (Read のみ、allowlist agent のみ)
+        # @see EARS-002#REQ-E004 — AST symbol digest 注入 (Read のみ、allowlist agent のみ)
         # @see EARS-002#REQ-W003
         stable_warning = None
+        ast_context = None
         if tool_name == "Read" and agent_type in _AGENT_ALLOWLIST:
             tool_input = event.get("tool_input", {})
             file_path = tool_input.get("file_path", "")
             if file_path:
                 stable_warning = _build_stable_warning(file_path)
+                ast_context = _build_ast_context(file_path)
 
-        # コンテキスト合成
+        # コンテキスト合成: stable_warning → ast_context → traverse_context
         parts = []
         if stable_warning:
             parts.append(stable_warning)
+        if ast_context:
+            parts.append(ast_context)
         if traverse_context:
             parts.append(traverse_context)
 
