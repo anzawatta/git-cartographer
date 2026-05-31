@@ -180,11 +180,11 @@ def _build_stable_warning(file_path: str) -> str | None:
     cochange_jsonl_path = os.path.join(output_dir, "co-change.jsonl")
     degree = _compute_cochange_degree(cochange_jsonl_path, rel_path)
 
-    # @see EARS-002#REQ-E003f — stability_score の null 対応
+    # @see EARS-002#REQ-E003 — stability_score の null 対応
     raw_score = matched_entry.get("stability_score")
     score_str = f"{raw_score:.3f}" if raw_score is not None else "N/A"
 
-    # @see EARS-002#REQ-E003e — カテゴリ判定と注入文言
+    # @see EARS-002#REQ-E003 — カテゴリ判定と注入文言
     if degree >= 3:
         return (
             f"⚠️ 安定層: {rel_path} (stability_score: {score_str}, co-change: {degree})\n"

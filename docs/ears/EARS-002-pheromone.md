@@ -53,7 +53,7 @@ provides:
 
 ### イベント駆動条件
 
-3. REQ-E003: PreToolUse Hook が発火し、`tool_name == "Read"` かつ `agent_type` が REQ-W003 の allowlist に含まれるとき、System は以下の手順で安定層コンテキストを生成し `hookSpecificOutput.additionalContext` に追加しなければならない:
+3. REQ-E003: PreToolUse Hook が発火し、`tool_name == "Read"` かつ `agent_type` が REQ-W003 の allowlist に含まれるとき、System は以下の手順で安定層コンテキストを生成し、フック応答の `reason` フィールド（`{"decision": "allow", "reason": "<context>"}` 形式）に追加しなければならない:
 
    a. **ward 解決**: `tool_input.file_path` から親ディレクトリを順に探索し、`.cartographer_state` ファイルを見つける。見つかった場合、第3フィールド（`output_dir`）を `maxsplit=2` で取得する。フォールバック: `.cartographer_state` が存在しない、または第3フィールドが存在しない場合は、`.cartographer_state` が存在するディレクトリの `output/` サブディレクトリを `output_dir` として使用する。`.cartographer_state` 自体が見つからない場合は注入をスキップする
 
