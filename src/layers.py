@@ -51,11 +51,12 @@ def build_structure(
             "hub_files": [(file, dep_count), ...],                      # 被参照数上位ファイル
         }
     """
-    # co-change 上位 20 ペアを抽出
+    # co-change 全ペアを抽出（上限なし）
     sorted_pairs = sorted(cochange_pairs.items(), key=lambda x: x[1]["count"], reverse=True)
+    # @see EARS-001#REQ-U005
     cochange_top = [
         (a, b, info["count"], info["last_hash"])
-        for (a, b), info in sorted_pairs[:20]
+        for (a, b), info in sorted_pairs
     ]
 
     # 被参照数（どのファイルから import されているか）を集計
